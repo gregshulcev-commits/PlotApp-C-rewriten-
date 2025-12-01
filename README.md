@@ -312,4 +312,7 @@ void PlotWidget::drawLayers(QPainter &painter) {
         // ВСЮ отрисовку делает фича
         layer->attachedFeature->drawOnLayer(painter, layer, *this);
     }
+ 
+
+
 }

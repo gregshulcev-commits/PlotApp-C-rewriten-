@@ -1,0 +1,13 @@
+-- The CXX compiler identification is GNU 14.2.0
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE
+-- Found MiniZip: /usr/lib/x86_64-linux-gnu/libminizip.so
+-- Configuring done (1.6s)
+-- Generating done (0.0s)
+-- Build files have been written to: /mnt/data/plotapp_modular_ui/build_gui_check

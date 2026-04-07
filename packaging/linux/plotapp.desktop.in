@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=@APP_NAME@
+Comment=@APP_COMMENT@
+Exec=@EXEC_PATH@
+Icon=@ICON_NAME@
+Terminal=false
+Categories=Science;Engineering;Utility;
+StartupNotify=true
+X-PlotApp-Managed=true

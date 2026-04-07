@@ -1,0 +1,50 @@
+PlotApp command help
+====================
+
+Built-in commands:
+  help                              Show this help text
+  pwd                               Show current working directory for the PlotApp console
+  cd <dir>                          Change current working directory for the PlotApp console
+  ls [dir]                          List files and subdirectories
+  plugins                           List discovered plugins
+  new-project                       Reset current project
+  title <text>                      Set project title
+  labels <x_label> <y_label>        Set axis labels
+  import <path> <x> <y> [name] [e]  Import numeric columns from CSV/TXT/XLSX
+                                    Optional [e] = error-column index (total error)
+  formula <expr> <xmin> <xmax> [samples] [name]
+                                    Add a graph layer generated from a formula with variable x
+  list-layers                       List current layers
+  add-point <layer> <x> <y>         Add a point to a layer
+  apply-plugin <plugin> <layer> [params]
+                                    Apply a plugin to a source layer and create a new derived layer
+  toggle-layer <layer>              Toggle layer visibility
+  save <path>                       Save a project (*.plotapp)
+  open <path>                       Open a project
+  export-svg <path>                 Export visible layers to SVG
+  !<bash command>                   Execute a bash command in the current console directory (requires PLOTAPP_ENABLE_SHELL=1)
+
+Console quality-of-life:
+  - Tab in the Qt command console completes built-in PlotApp commands.
+  - If several commands match, suggestions are printed in the console log.
+  - Bash commands stay opt-in via leading '!'.
+
+Formula syntax:
+  - variable: x
+  - operators: + - * / ^
+  - functions: sin cos tan asin acos atan sqrt abs exp log ln log10 floor ceil
+  - constants: pi e
+  Example:
+    formula "sin(x) + 0.1*x^2" -10 10 600 parabola_with_wave
+
+LaTeX-like labels:
+  - subscripts: I_1, I_{out}
+  - superscripts: x^2, E^{max}
+  - Greek shortcuts: \alpha \beta \mu \sigma \Delta \lambda \pi
+
+Notes:
+  - save/export commands automatically append supported extensions when missing.
+  - formula <expr> <xmin> <xmax> <name> is valid; [samples] remains optional.
+  - relative paths are resolved relative to the PlotApp console working directory.
+  - extensionless files can be imported when they look like tabular text data.
+  - bash commands are optional, disabled by default, and require PLOTAPP_ENABLE_SHELL=1.

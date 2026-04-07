@@ -10,7 +10,9 @@ The following paths are compiled and tested:
 - XLSX importer
 - extensionless delimited import
 - malformed project rejection
+- oversized/non-regular project rejection and per-layer point limits
 - project save/load roundtrip including new layer metadata
+- secure project save that no longer reuses a predictable `.tmp` sidecar
 - viewport-driven sampling for formulas and continuous derived layers
 - plugin discovery, rediscovery, and execution
 - derived-layer recomputation after reopen
@@ -30,14 +32,14 @@ ctest --test-dir build --output-on-failure
 ## Additional sanitizer verification used in this iteration
 
 ```bash
-cmake -S . -B build-asan -G Ninja \
+cmake -S . -B build_asan -G Ninja \
   -DPLOTAPP_BUILD_GUI=OFF \
   -DPLOTAPP_BUILD_TESTS=ON \
   -DCMAKE_CXX_FLAGS='-fsanitize=address,undefined -fno-omit-frame-pointer' \
   -DCMAKE_EXE_LINKER_FLAGS='-fsanitize=address,undefined' \
   -DCMAKE_SHARED_LINKER_FLAGS='-fsanitize=address,undefined'
-cmake --build build-asan
-ASAN_OPTIONS=detect_leaks=1 ctest --test-dir build-asan --output-on-failure
+cmake --build build_asan
+ASAN_OPTIONS=detect_leaks=1 ctest --test-dir build_asan --output-on-failure
 ```
 
 ## Test data
@@ -58,6 +60,7 @@ ASAN_OPTIONS=detect_leaks=1 ctest --test-dir build-asan --output-on-failure
 7. Apply `smooth_curve` and `newton_polynomial` (change degree in the dialog).
 8. Float the Layers and Command console docks, move/resize them, close them, then restore them from the toolbar/menu.
 9. Export SVG and confirm the visible plot state matches the canvas.
+10. Run `install_app.sh --with-gui` on a workstation whose user path contains spaces or `&` and confirm the generated GNOME launcher still starts PlotApp.
 
 ## Why the test split looks this way
 

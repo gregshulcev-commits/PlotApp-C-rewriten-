@@ -39,8 +39,14 @@ Output:
 
 ## Example plugins in this repository
 
+Current in-tree examples include:
 - `linear_fit` — least-squares straight-line approximation
 - `moving_average` — simple smoothing for noisy data
+- `local_extrema` — min/max point extraction with per-point roles
+- `smooth_curve` — densified smooth curve generation
+- `error_bars` — attach per-point errors from uniform input or imported columns
+- `newton_deg2`, `newton_deg4`, `newton_deg5` — fixed-degree Newton interpolation examples
+- `newton_polynomial` — configurable Newton interpolation
 
 ## Adding a new plugin
 

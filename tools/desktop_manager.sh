@@ -109,7 +109,73 @@ manifest_escape() {
     printf '%s' "$value"
 }
 
+desktop_field_escape() {
+    local value=${1-}
+    value=${value//$'\n'/ }
+    value=${value//$'\r'/ }
+    printf '%s' "$value"
+}
+
+sed_replacement_escape() {
+    local value=${1-}
+    value=${value//\\/\\\\}
+    value=${value//&/\\&}
+    value=${value//|/\\|}
+    printf '%s' "$value"
+}
+
+desktop_exec_token() {
+    local value
+    value=$(desktop_field_escape "${1-}")
+    value=${value//\\/\\\\}
+    value=${value//\"/\\\"}
+    printf '"%s"' "$value"
+}
+
+render_desktop_template() {
+    local template=$1
+    local app_name=$2
+    local app_comment=$3
+    local exec_value=$4
+    local icon_name=$5
+    local safe_app_name safe_app_comment safe_exec_value safe_icon_name
+    safe_app_name=$(sed_replacement_escape "$app_name")
+    safe_app_comment=$(sed_replacement_escape "$app_comment")
+    safe_exec_value=$(sed_replacement_escape "$exec_value")
+    safe_icon_name=$(sed_replacement_escape "$icon_name")
+    sed \
+        -e "s|@APP_NAME@|$safe_app_name|g" \
+        -e "s|@APP_COMMENT@|$safe_app_comment|g" \
+        -e "s|@EXEC_PATH@|$safe_exec_value|g" \
+        -e "s|@ICON_NAME@|$safe_icon_name|g" \
+        "$template"
+}
+
+cleanup_install_temp_artifacts() {
+    local build_dir=${1-}
+    local stage_dir=${2-}
+    local manifest_backup=${3-}
+    local json_backup=${4-}
+    [[ -n $build_dir ]] && rm -rf "$build_dir"
+    [[ -n $stage_dir ]] && rm -rf "$stage_dir"
+    [[ -n $manifest_backup ]] && rm -f "$manifest_backup"
+    [[ -n $json_backup ]] && rm -f "$json_backup"
+}
+
+cleanup_install_state_on_exit() {
+    if [[ ${PLOTAPP_INSTALL_CLEANUP_ENABLED:-0} != 1 ]]; then
+        return
+    fi
+    cleanup_install_temp_artifacts \
+        "${PLOTAPP_INSTALL_BUILD_DIR:-}" \
+        "${PLOTAPP_INSTALL_STAGE_DIR:-}" \
+        "${PLOTAPP_INSTALL_MANIFEST_BACKUP:-}" \
+        "${PLOTAPP_INSTALL_JSON_BACKUP:-}"
+}
+
 write_file_atomic() {
+
+
     local target=$1
     local mode=$2
     local dir tmp
@@ -482,22 +548,20 @@ sync_desktop_integration() {
         return 0
     fi
 
+    local desktop_name desktop_comment desktop_exec
+    desktop_name=$(desktop_field_escape "$APP_NAME")
+    desktop_comment=$(desktop_field_escape "$APP_DESCRIPTION")
+    desktop_exec="$(desktop_exec_token "$launcher_path") %F"
+
     if [[ -f "$template_source" ]]; then
-        write_file_atomic "$desktop_file" 0644 <<EOF_DESKTOP
-$(sed \
-    -e "s|@APP_NAME@|$APP_NAME|g" \
-    -e "s|@APP_COMMENT@|$APP_DESCRIPTION|g" \
-    -e "s|@EXEC_PATH@|$launcher_path %F|g" \
-    -e "s|@ICON_NAME@|$APP_ID|g" \
-    "$template_source")
-EOF_DESKTOP
+        render_desktop_template "$template_source" "$desktop_name" "$desktop_comment" "$desktop_exec" "$APP_ID" | write_file_atomic "$desktop_file" 0644
     else
         write_file_atomic "$desktop_file" 0644 <<EOF_DESKTOP_FALLBACK
 [Desktop Entry]
 Type=Application
-Name=$APP_NAME
-Comment=$APP_DESCRIPTION
-Exec=$launcher_path %F
+Name=$desktop_name
+Comment=$desktop_comment
+Exec=$desktop_exec
 Icon=$APP_ID
 Terminal=false
 Categories=Science;Engineering;Utility;
@@ -703,6 +767,13 @@ perform_install_from_source() {
     json_backup=$(mktemp)
     local source_manager="$source_root/tools/desktop_manager.sh"
 
+    PLOTAPP_INSTALL_CLEANUP_ENABLED=1
+    PLOTAPP_INSTALL_BUILD_DIR="$build_dir"
+    PLOTAPP_INSTALL_STAGE_DIR="$stage_dir"
+    PLOTAPP_INSTALL_MANIFEST_BACKUP="$manifest_backup"
+    PLOTAPP_INSTALL_JSON_BACKUP="$json_backup"
+    trap cleanup_install_state_on_exit EXIT
+
     [[ -f "$source_manager" ]] || die "Source manager is missing: $source_manager"
     mkdir -p "$app_root" "$metadata_dir" "$system_dir"
     save_previous_manifest_backup "$manifest_path" "$manifest_backup"
@@ -712,7 +783,7 @@ perform_install_from_source() {
         confirm_action "An installed payload already exists in $install_home. Reinstall and replace current payload?" "$yes_flag" || {
             rm -f "$manifest_backup" "$json_backup"
             rm -rf "$build_dir"
-            exit 1
+            return 1
         }
     fi
 
@@ -819,8 +890,10 @@ perform_install_from_source() {
         mv "$old_current_backup" "$previous_payload_dir"
     fi
 
-    rm -rf "$build_dir"
-    rm -f "$manifest_backup" "$json_backup"
+    cleanup_install_temp_artifacts "$build_dir" "$stage_dir" "$manifest_backup" "$json_backup"
+    PLOTAPP_INSTALL_CLEANUP_ENABLED=0
+    unset PLOTAPP_INSTALL_BUILD_DIR PLOTAPP_INSTALL_STAGE_DIR PLOTAPP_INSTALL_MANIFEST_BACKUP PLOTAPP_INSTALL_JSON_BACKUP
+    trap - EXIT
 
     log "Managed install ready"
     log "Current payload : $current_payload_dir"

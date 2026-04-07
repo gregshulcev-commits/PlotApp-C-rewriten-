@@ -128,6 +128,8 @@ The implementation uses these safeguards:
 - staging publish directory before switching `current`;
 - `current` → `previous` fallback on publish failure;
 - atomic writes for wrappers and manifests via temp file + `mv`;
+- desktop-entry rendering uses escaped placeholder substitution plus quoted `Exec=` values, so launcher paths with spaces or `&` stay valid;
+- temporary build/staging/backup artifacts are cleaned automatically on early install failure;
 - explicit checks for `git` and `cmake`;
 - no Python runtime dependency;
 - wrapper overwrite protection for non-managed files.

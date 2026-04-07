@@ -2,9 +2,9 @@
 
 ## Main workflow
 1. Import data from CSV/TXT/XLSX.
-2. Choose X/Y columns and, optionally, an error column.
+2. Choose X/Y columns. In the GUI the import dialog no longer asks for an error column.
 3. Inspect the new layer in the layer tree.
-4. Add a formula layer or apply a plugin to the selected source layer.
+4. Add a formula layer or apply a plugin (including `error_bars`) to the selected source layer.
 5. Drag the legend for any visible layer to a convenient place.
 6. Save the project as `.plotapp` and reopen it later.
 
@@ -41,8 +41,8 @@ Press `Tab` in the command line to complete built-in PlotApp commands.
 
 ## Error bars
 There are two ways to work with error bars:
-- import an extra error column when loading data
-- apply the `error_bars` plugin to a selected layer
+- in the CLI, `import <path> <x> <y> [name] [error_column]` still accepts an optional error column for backward compatibility;
+- in the GUI, import the table normally and then apply the `error_bars` plugin to the selected layer, choosing a numeric imported column in the plugin dialog.
 
 Error values are stored as total error height, so an error value of `1.0` is rendered as `+0.5 / -0.5` around the point.
 
@@ -50,3 +50,4 @@ Error values are stored as total error height, so an error value of `1.0` is ren
 Formula layers are stored as expressions but rendered across the *currently visible* X-range in the UI, so panning/zooming re-samples the curve for the visible plot window.
 
 - Import and manual point entry reject non-finite numeric values such as `NaN` and `Inf`.
+- `.plotapp` loading rejects oversized/non-regular files and caps per-layer point/table payloads to reduce memory-exhaustion risk.

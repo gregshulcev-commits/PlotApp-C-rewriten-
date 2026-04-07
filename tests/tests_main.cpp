@@ -272,6 +272,79 @@ void test_project_roundtrip() {
     require(loaded.layers()[1].type == LayerType::FormulaSeries, "Roundtrip formula type mismatch");
 }
 
+
+void test_project_save_avoids_predictable_temp_name() {
+    Project project;
+    auto& raw = project.createLayer("raw");
+    raw.points = {{0.0, 1.0}, {1.0, 2.0}};
+
+    const auto path = buildDir() / "secure_save.plotapp";
+    const auto legacyTmp = std::filesystem::path(path.string() + ".tmp");
+    writeTextFile(legacyTmp, "legacy sentinel\n");
+
+    ProjectSerializer::save(project, path.string());
+    require(std::filesystem::exists(path), "Secure save did not create the project file");
+
+    std::ifstream in(legacyTmp);
+    std::string legacyContent;
+    std::getline(in, legacyContent);
+    require(legacyContent == "legacy sentinel", "Secure save should not reuse the predictable .tmp sidecar");
+
+    auto loaded = ProjectSerializer::load(path.string());
+    require(loaded.layers().size() == 1, "Secure save roundtrip failed");
+}
+
+void test_project_resource_limits() {
+    constexpr std::uintmax_t kProjectTooLargeOffset = 64u * 1024u * 1024u;
+    constexpr std::size_t kTooManyPoints = 200'001u;
+
+    const auto oversizedProject = buildDir() / "oversized.plotapp";
+    {
+        std::ofstream out(oversizedProject, std::ios::binary);
+        out << "PLOTAPP_PROJECT=5\n";
+        out.seekp(static_cast<std::streamoff>(kProjectTooLargeOffset));
+        out.put('\n');
+    }
+
+    bool threw = false;
+    try {
+        (void)ProjectSerializer::load(oversizedProject.string());
+    } catch (const std::exception&) {
+        threw = true;
+    }
+    require(threw, "Oversized project file should be rejected before parsing");
+
+    const auto tooManyPointsProject = buildDir() / "too_many_points.plotapp";
+    {
+        std::ofstream out(tooManyPointsProject);
+        out << "PLOTAPP_PROJECT=5\n";
+        out << "LAYER_BEGIN\n";
+        out << "NAME=too_many\n";
+        for (std::size_t i = 0; i < kTooManyPoints; ++i) {
+            out << "POINT=" << i << ',' << i << '\n';
+        }
+        out << "LAYER_END\n";
+    }
+
+    threw = false;
+    try {
+        (void)ProjectSerializer::load(tooManyPointsProject.string());
+    } catch (const std::exception&) {
+        threw = true;
+    }
+    require(threw, "Project with too many points should be rejected");
+
+    const auto nonRegularPath = buildDir() / "project_dir_instead_of_file";
+    std::filesystem::create_directories(nonRegularPath);
+    threw = false;
+    try {
+        (void)ProjectSerializer::load(nonRegularPath.string());
+    } catch (const std::exception&) {
+        threw = true;
+    }
+    require(threw, "Project loader should reject non-regular file paths");
+}
+
 void test_invalid_project_rejected() {
     const auto badProject = buildDir() / "not_a_project.txt";
     {
@@ -460,6 +533,8 @@ int main() {
         test_viewport_sampling();
         test_child_visibility_independent_from_parent();
         test_project_roundtrip();
+        test_project_save_avoids_predictable_temp_name();
+        test_project_resource_limits();
         test_invalid_project_rejected();
         test_project_numeric_sanitization_and_rejection();
         test_plugins_and_recompute();

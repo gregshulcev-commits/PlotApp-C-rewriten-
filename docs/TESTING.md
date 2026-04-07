@@ -22,6 +22,8 @@ The following paths are compiled and tested:
 - SVG rendering output, escaping, dark-theme foreground, and non-filled continuous paths
 - command dispatcher basic workflow
 - formula parser including scientific-notation literals
+- build-version embedding from `VERSION.txt`
+- managed-install manifest parsing and update-status output parsing
 
 ## Test command
 
@@ -61,6 +63,9 @@ ASAN_OPTIONS=detect_leaks=1 ctest --test-dir build_asan --output-on-failure
 8. Float the Layers and Command console docks, move/resize them, close them, then restore them from the toolbar/menu.
 9. Export SVG and confirm the visible plot state matches the canvas.
 10. Run `install_app.sh --with-gui` on a workstation whose user path contains spaces or `&` and confirm the generated GNOME launcher still starts PlotApp.
+11. Open **File -> Settings -> Updates** from the managed install and confirm build version, installed version, install time, and installed commit are populated from the manifest.
+12. Click **Check updates** and confirm the remote commit/status fields change exactly as `update_app.sh --check-only` reports.
+13. Trigger **Update** against a test repository, confirm the managed install is replaced successfully, and confirm the dialog asks for an application restart.
 
 ## Why the test split looks this way
 

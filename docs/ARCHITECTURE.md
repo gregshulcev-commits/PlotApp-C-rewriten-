@@ -58,6 +58,7 @@ It adds:
 - dialogs for file import and plugin execution
 - layer visibility toggles
 - an integrated command console
+- a settings dialog that can surface managed-install version/update metadata
 
 ## Why this design matches the request
 
@@ -108,3 +109,12 @@ Selected source layer
 - `PlotCanvasWidget` is the interactive window renderer used in the Qt UI.
 
 This split keeps export and automated checks independent from GUI availability.
+
+## Desktop update integration
+
+The Qt settings dialog does **not** implement a second update engine.
+Instead it:
+- reads managed-install metadata from `installation.manifest` via shared core parsing utilities;
+- shows build version plus installed version / install time / installed commit / repo / branch;
+- invokes the stable managed-install shell workflow with `QProcess`;
+- keeps the shell desktop manager as the single source of truth for GitHub/Git updates.

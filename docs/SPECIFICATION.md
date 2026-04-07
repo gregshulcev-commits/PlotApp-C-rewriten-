@@ -52,6 +52,7 @@ The primary target platform is Fedora Workstation 43 on a ThinkPad T14 Gen 2 AMD
 2. The UI shall expose a layer list with visibility toggles.
 3. The UI shall expose import, open, save, plugin, and export actions.
 4. The UI shall include a command console acting as a simplified wrapper around CLI commands.
+5. When running from a managed installation, the settings dialog shall expose an Updates tab with installed version, install time, installed commit, and buttons to check/install updates using the managed-update workflow.
 
 ## Non-functional requirements
 

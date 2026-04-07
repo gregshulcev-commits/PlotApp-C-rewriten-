@@ -1,32 +1,30 @@
-# Iteration Report — fix bug v7
+# Iteration Report — fix bug v8
 
-This continuation focused on a deeper source audit of project-file save/load behavior, managed-install desktop generation, documentation drift, and reproducible verification of the core/CLI path.
+This continuation focused on adding a managed-update feature to the Qt settings UI without splitting the update logic away from the existing shell workflow.
 
 ## Completed in this pass
-- replaced predictable `<project>.tmp` save behavior with unique adjacent temp-file creation plus atomic rename;
-- rejected oversized and non-regular `.plotapp` inputs before parsing;
-- capped project layers, points, imported rows/columns, and line length during load;
-- added save-side validation so unsupported oversized projects are rejected before serialization;
-- hardened managed desktop entry generation so launcher paths with spaces or `&` remain valid;
-- added cleanup state for temporary managed-install artifacts on early failure;
-- synchronized user/docs with the current GUI error-bar workflow and current plugin set;
-- added/updated regression tests for secure save temp naming and project resource-limit rejection.
+- embedded `VERSION.txt` into the build as shared runtime build info;
+- added shared managed-install manifest parsing and update-status parsing utilities in the core layer;
+- extended the Qt settings dialog with a dedicated **Updates** tab;
+- surfaced build version, installed version, install time, installed commit, repository, branch, and remote commit/status in the dialog;
+- connected **Check updates** and **Update** to the existing `desktop_manager.sh update` flow through `QProcess`;
+- blocked dialog closing while a managed update process is running, reducing the risk of interrupting an in-flight reinstall;
+- updated documentation so the GUI update workflow matches the managed install architecture;
+- added regression tests for build-version embedding, manifest parsing, and updater status parsing.
 
 ## Verified here
 - headless build of core/CLI/plugins;
 - `ctest` passed;
-- AddressSanitizer + UBSan build/test passed;
-- shell syntax validation via `bash -n`;
-- targeted desktop-entry generation check with a launcher path containing spaces and `&`.
+- AddressSanitizer + UBSan build/test passed.
 
 ## Not fully verified here
 - full Qt6 desktop build and runtime behavior;
-- real GNOME launcher behavior on a workstation;
-- real GitHub network update flow.
+- real GitHub network update flow via the GUI buttons;
+- final restart UX on a real workstation after a successful GUI-triggered managed update.
 
 ## Reason
-- the container used for this work does not provide Qt6 development packages or a real desktop session.
+- the container used for this work does not provide Qt6 development packages, a desktop session, or a real GitHub-connected managed installation.
 
 ## See also
-- `FIX_BUG_V7_REPORT.md`
+- `FIX_BUG_V8_REPORT.md`
 - `NOT_READY.md`

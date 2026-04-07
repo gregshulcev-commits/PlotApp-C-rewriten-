@@ -1,6 +1,17 @@
 cmake_minimum_required(VERSION 3.20)
 project(plotapp LANGUAGES CXX)
 
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION.txt" PLOTAPP_VERSION_LINES LIMIT_COUNT 1)
+list(LENGTH PLOTAPP_VERSION_LINES PLOTAPP_VERSION_LINE_COUNT)
+if(PLOTAPP_VERSION_LINE_COUNT GREATER 0)
+    list(GET PLOTAPP_VERSION_LINES 0 PLOTAPP_VERSION_STRING)
+else()
+    set(PLOTAPP_VERSION_STRING "unknown")
+endif()
+set(PLOTAPP_VERSION_STRING_ESCAPED "${PLOTAPP_VERSION_STRING}")
+string(REPLACE "\\" "\\\\" PLOTAPP_VERSION_STRING_ESCAPED "${PLOTAPP_VERSION_STRING_ESCAPED}")
+string(REPLACE "\"" "\\\"" PLOTAPP_VERSION_STRING_ESCAPED "${PLOTAPP_VERSION_STRING_ESCAPED}")
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -16,6 +27,8 @@ find_package(MiniZip REQUIRED)
 find_package(Qt6 COMPONENTS Widgets Gui Core QUIET)
 
 add_library(plotapp_core
+    src/core/BuildInfo.cpp
+    src/core/ManagedInstall.cpp
     src/core/Project.cpp
     src/core/TextUtil.cpp
     src/core/FormulaEvaluator.cpp
@@ -41,6 +54,8 @@ target_link_libraries(plotapp_core
         MiniZip::MiniZip
         dl
 )
+
+target_compile_definitions(plotapp_core PUBLIC PLOTAPP_VERSION_STRING="${PLOTAPP_VERSION_STRING_ESCAPED}")
 
 target_compile_options(plotapp_core PRIVATE -Wall -Wextra -Wpedantic)
 

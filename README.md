@@ -2,7 +2,7 @@
 
 PlotApp is a modular plotting application built around a C++17 core, a CLI/command-console workflow, and a Qt6 desktop UI wrapper.
 
-This revision keeps the layered architecture intact and focuses on bug fixing, security hardening, and a few high-value functional improvements in the core/CLI path.
+This revision keeps the layered architecture intact and focuses on bug fixing, security hardening, and a high-value managed-update feature in the Qt settings UI.
 
 ## What changed in this update
 
@@ -31,7 +31,13 @@ This revision keeps the layered architecture intact and focuses on bug fixing, s
   - unsafe colors fall back to a safe default,
   - formula layers are rendered from formula metadata over the current visible viewport,
   - error bars are exported too;
-- extended tests to cover extensionless import, oversized/invalid project rejection, secure project-save temp naming, SVG escaping/sanitization, plugin rediscovery, and formula-name parsing.
+- added a dedicated **Settings -> Updates** tab in the Qt UI that shows:
+  - build version,
+  - installed version, install time, and installed Git commit from the managed-install manifest,
+  - configured repository/branch and latest remote commit after a check;
+- wired the new GUI buttons to the existing managed install workflow (`desktop_manager.sh update`) so GUI and shell updates stay consistent;
+- added shared build-info / managed-install manifest parsing utilities in the core layer plus regression tests for version embedding, manifest parsing, and update-status parsing;
+- extended tests to cover extensionless import, oversized/invalid project rejection, secure project-save temp naming, SVG escaping/sanitization, plugin rediscovery, formula-name parsing, and managed-install metadata parsing.
 
 ## Build
 
@@ -133,9 +139,11 @@ The managed installer uses:
 - `~/.local/share/plotapp-install/metadata/installation.json` as the diagnostic JSON mirror,
 - `~/.local/bin/plotapp*` plus a GNOME desktop entry/icon for user-facing integration.
 
-See `docs/MANAGED_INSTALL.md` for the full layout, manifest format, update workflow, and release discipline.
+See `docs/MANAGED_INSTALL.md` for the full layout, manifest format, update workflow, release discipline, and GUI integration notes for the new Updates tab.
+
+When PlotApp is launched from a managed installation, the same workflow is also available in **File -> Settings -> Updates**.
 
 ## Status note
 The core, CLI, serializers, formula engine, importers, plugins and automated tests were rebuilt and verified in the container.
-The Qt6 UI source is included and partially updated, but it was **not fully compiled in the container** because the container did not provide Qt6 development packages.
+The Qt6 UI source is included and updated with the new **Settings -> Updates** tab, but it was **not fully compiled in the container** because the container did not provide Qt6 development packages.
 See `docs/STATUS_AND_GAPS.md`.

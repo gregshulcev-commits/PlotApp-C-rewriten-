@@ -121,6 +121,19 @@ Current manifest keys include:
 
 This gives a clean rebuild path without mutating the installed payload in place.
 
+## GUI integration
+
+When the Qt desktop UI is launched from a managed installation, **File -> Settings -> Updates** uses the same managed-update flow instead of implementing a second updater.
+
+The tab:
+- reads `installation.manifest` through a shared C++ parser;
+- shows build version, installed version, install time, installed commit, repository, and branch;
+- runs `desktop_manager.sh update --install-home <...> --check-only` for **Check updates**;
+- runs `desktop_manager.sh update --install-home <...> --yes` for **Update**;
+- asks the user to restart PlotApp after a successful managed reinstall.
+
+If the app is launched outside a managed install, the tab stays informational and disables update actions.
+
 ## Safety model
 
 The implementation uses these safeguards:

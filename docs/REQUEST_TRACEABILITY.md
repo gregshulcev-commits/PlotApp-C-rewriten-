@@ -2,16 +2,17 @@
 
 This file maps the latest requested changes to the current source update.
 
-1. Formula input like `2sin(x)` must not hang/crash the program.
-   - implemented in `src/core/FormulaEvaluator.cpp` by adding implicit multiplication handling for common cases.
+1. Add update controls to the graphical interface.
+   - implemented in `src/ui/SettingsDialog.*` by adding a dedicated **Updates** tab.
+   - the tab exposes **Check updates** and **Update** buttons and a live updater log.
 
-2. Invalid formula input should show a warning and let the user correct it.
-   - implemented in `include/plotapp/FormulaEvaluator.h`, `src/core/FormulaEvaluator.cpp`, `src/core/ProjectController.cpp`, `src/ui/FormulaLayerDialog.*`, `src/ui/LayerPropertiesDialog.*`, and `src/ui/MainWindow.cpp`.
-   - creation/editing now validate first and only commit changes after successful regeneration.
+2. Show the currently installed version, install time, and GitHub commit in the settings UI.
+   - implemented through shared managed-install metadata parsing in `include/plotapp/ManagedInstall.h`, `src/core/ManagedInstall.cpp`, and the new UI bindings in `src/ui/SettingsDialog.cpp`.
+   - build-time version embedding was added via `include/plotapp/BuildInfo.h`, `src/core/BuildInfo.cpp`, and `CMakeLists.txt`.
 
-3. A failed formula creation/edit must not leave a broken layer behind that later crashes rendering.
-   - implemented in `src/core/ProjectController.cpp` and protected additionally in `src/core/LayerSampler.cpp`.
+3. Keep GUI updates aligned with the existing shell/managed-install workflow.
+   - implemented in `src/ui/SettingsDialog.cpp` by invoking the stable `desktop_manager.sh update` flow with `QProcess` instead of duplicating update logic in C++.
+   - documented in `docs/MANAGED_INSTALL.md` and `docs/ARCHITECTURE.md`.
 
-4. Parent layers should be hideable without forcing child layers to become hidden too.
-   - implemented in `src/ui/MainWindow.cpp` by removing recursive visibility propagation in the layer tree.
-   - the project-level independent visibility behavior is also covered by tests in `tests/tests_main.cpp`.
+4. Keep the change testable even without Qt in the container.
+   - implemented by moving version/manifest/update-status parsing into the shared core layer and covering it in `tests/tests_main.cpp`.

@@ -51,3 +51,12 @@ Formula layers are stored as expressions but rendered across the *currently visi
 
 - Import and manual point entry reject non-finite numeric values such as `NaN` and `Inf`.
 - `.plotapp` loading rejects oversized/non-regular files and caps per-layer point/table payloads to reduce memory-exhaustion risk.
+
+## Settings -> Updates
+- open **File -> Settings -> Updates** when PlotApp is running from a managed installation;
+- **Build version** comes from the version embedded at build time;
+- **Installed version**, **Installed at**, and **Installed commit** come from `~/.local/share/plotapp-install/metadata/installation.manifest`;
+- **Check updates** runs the same managed-update check as `update_app.sh --check-only`;
+- **Update** runs the same managed reinstall as `update_app.sh --yes`;
+- after a successful update, restart PlotApp to launch the new build;
+- if PlotApp was started from an unmanaged/development run, the tab stays informational and the update buttons remain disabled.

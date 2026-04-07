@@ -1,4 +1,6 @@
+#include "plotapp/BuildInfo.h"
 #include "plotapp/CommandDispatcher.h"
+#include "plotapp/ManagedInstall.h"
 #include "plotapp/FormulaEvaluator.h"
 #include "plotapp/Importer.h"
 #include "plotapp/LayerSampler.h"
@@ -50,6 +52,66 @@ bool hasPlugin(const PluginManager& manager, const std::string& id) {
         if (plugin.id == id) return true;
     }
     return false;
+}
+
+void test_build_info_version_string() {
+    std::ifstream in(sourceDir() / "VERSION.txt");
+    std::string expected;
+    std::getline(in, expected);
+    require(!expected.empty(), "VERSION.txt should not be empty");
+    require(plotappVersionString() == expected, "Build info version string mismatch");
+}
+
+void test_managed_install_manifest_parsing() {
+    const auto manifestPath = buildDir() / "test_tmp" / "installation.manifest";
+    writeTextFile(manifestPath,
+                  "# Managed by PlotApp desktop manager\n"
+                  "manifest_version=1\n"
+                  "app_name=PlotApp\n"
+                  "app_id=plotapp\n"
+                  "install_home=/tmp/plotapp-install\n"
+                  "system_manager_path=/tmp/plotapp-install/system/desktop_manager.sh\n"
+                  "installed_at=2026-04-06T11:22:33Z\n"
+                  "installed_version=fix bug v8\n"
+                  "source_commit=abcdef1234567890\n"
+                  "source_commit_short=abcdef123456\n"
+                  "repo_url=https://github.com/example/plotapp.git\n"
+                  "branch=main\n"
+                  "update_launcher_path=/tmp/bin/plotapp-update\n");
+
+    auto info = loadManagedInstallInfo(manifestPath);
+    require(info.has_value(), "Managed install manifest should be parsed");
+    require(info->valid, "Managed install info should be marked valid");
+    require(info->installHome == "/tmp/plotapp-install", "Managed install home mismatch");
+    require(info->systemManagerPath == "/tmp/plotapp-install/system/desktop_manager.sh", "Managed install manager path mismatch");
+    require(info->installedVersion == "fix bug v8", "Managed install version mismatch");
+    require(info->sourceCommit == "abcdef1234567890", "Managed install commit mismatch");
+    require(info->sourceCommitShort == "abcdef123456", "Managed install short commit mismatch");
+    require(info->repoUrl == "https://github.com/example/plotapp.git", "Managed install repo mismatch");
+    require(info->branch == "main", "Managed install branch mismatch");
+
+    const auto foundManifest = findManagedInstallManifest({buildDir() / "missing.manifest", manifestPath});
+    require(foundManifest.has_value() && *foundManifest == manifestPath, "Managed install finder should pick the first existing manifest");
+}
+
+void test_managed_install_update_status_parsing() {
+    const std::string sampleOutput =
+        "Installed version : fix bug v8\n"
+        "Installed commit  : abcdef1234567890\n"
+        "Update source     : https://github.com/example/plotapp.git\n"
+        "Remote branch     : main\n"
+        "Remote commit     : fedcba9876543210\n"
+        "Status            : update available\n"
+        "[plotapp-manager] extra diagnostic line\n";
+
+    const auto parsed = parseManagedInstallUpdateStatus(sampleOutput);
+    require(parsed.valid, "Update status output should be parsed");
+    require(parsed.installedVersion == "fix bug v8", "Parsed installed version mismatch");
+    require(parsed.installedCommit == "abcdef1234567890", "Parsed installed commit mismatch");
+    require(parsed.updateSource == "https://github.com/example/plotapp.git", "Parsed update source mismatch");
+    require(parsed.remoteBranch == "main", "Parsed remote branch mismatch");
+    require(parsed.remoteCommit == "fedcba9876543210", "Parsed remote commit mismatch");
+    require(parsed.status == "update available", "Parsed update status mismatch");
 }
 
 void test_csv_import() {
@@ -524,6 +586,9 @@ void test_command_dispatcher() {
 
 int main() {
     try {
+        test_build_info_version_string();
+        test_managed_install_manifest_parsing();
+        test_managed_install_update_status_parsing();
         test_csv_import();
         test_txt_import();
         test_extensionless_import_and_binary_rejection();

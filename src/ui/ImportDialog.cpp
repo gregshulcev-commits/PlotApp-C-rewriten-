@@ -1,10 +1,13 @@
 #include "ImportDialog.h"
 
+#include "DialogUtil.h"
+
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
+#include <QSignalBlocker>
 #include <QTableWidget>
 #include <QTableWidgetItem>
 #include <QVBoxLayout>
@@ -12,9 +15,30 @@
 #include <algorithm>
 
 namespace plotapp::ui {
+namespace {
+
+QString headerLabelFor(const plotapp::TableData& table, int index) {
+    if (index >= 0 && static_cast<std::size_t>(index) < table.headers.size()) {
+        const auto& header = table.headers[static_cast<std::size_t>(index)];
+        if (!header.empty()) return QString::fromStdString(header);
+    }
+    return QString("Column %1").arg(index + 1);
+}
+
+QString importedLayerDisplayName(const plotapp::TableData& table, int xIndex, int yIndex) {
+    const QString xLabel = headerLabelFor(table, xIndex).trimmed();
+    const QString yLabel = headerLabelFor(table, yIndex).trimmed();
+    if (!xLabel.isEmpty() && !yLabel.isEmpty() && xLabel != yLabel) return QString("%1 vs %2").arg(yLabel, xLabel);
+    if (!yLabel.isEmpty()) return yLabel;
+    if (!xLabel.isEmpty()) return xLabel;
+    return QString::fromStdString(table.sourcePath.empty() ? "Imported layer" : table.sourcePath);
+}
+
+} // namespace
 
 ImportDialog::ImportDialog(const plotapp::TableData& table, QWidget* parent) : QDialog(parent) {
     setWindowTitle("Import columns");
+    applyDialogWindowSize(this, QSize(980, 620), QSize(760, 500));
     auto* layout = new QVBoxLayout(this);
     layout->addWidget(new QLabel(QString("Source: %1").arg(QString::fromStdString(table.sourcePath))));
     if (!table.sheetName.empty()) {
@@ -39,6 +63,10 @@ ImportDialog::ImportDialog(const plotapp::TableData& table, QWidget* parent) : Q
     layout->addWidget(yColumnBox_);
     layout->addWidget(new QLabel("Errors are added later as a separate plugin/layer."));
     if (table.headers.size() > 1) yColumnBox_->setCurrentIndex(1);
+    updateSuggestedLayerName();
+    connect(xColumnBox_, qOverload<int>(&QComboBox::currentIndexChanged), this, &ImportDialog::updateSuggestedLayerName);
+    connect(yColumnBox_, qOverload<int>(&QComboBox::currentIndexChanged), this, &ImportDialog::updateSuggestedLayerName);
+    connect(layerNameEdit_, &QLineEdit::textEdited, this, &ImportDialog::onLayerNameEdited);
 
     previewTable_ = new QTableWidget(this);
     previewTable_->setColumnCount(static_cast<int>(table.headers.size()));
@@ -56,6 +84,7 @@ ImportDialog::ImportDialog(const plotapp::TableData& table, QWidget* parent) : Q
         }
     }
     previewTable_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+    previewTable_->setMinimumHeight(320);
     layout->addWidget(previewTable_);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
@@ -67,5 +96,30 @@ ImportDialog::ImportDialog(const plotapp::TableData& table, QWidget* parent) : Q
 std::size_t ImportDialog::xColumn() const { return static_cast<std::size_t>(xColumnBox_->currentData().toInt()); }
 std::size_t ImportDialog::yColumn() const { return static_cast<std::size_t>(yColumnBox_->currentData().toInt()); }
 QString ImportDialog::layerName() const { return layerNameEdit_->text(); }
+
+void ImportDialog::updateSuggestedLayerName() {
+    const int xIndex = xColumnBox_ != nullptr ? xColumnBox_->currentData().toInt() : 0;
+    const int yIndex = yColumnBox_ != nullptr ? yColumnBox_->currentData().toInt() : 0;
+
+    plotapp::TableData table;
+    table.sourcePath = {};
+    table.headers.reserve(static_cast<std::size_t>(std::max(xIndex, yIndex) + 1));
+    for (int i = 0; i < xColumnBox_->count(); ++i) {
+        table.headers.push_back(xColumnBox_->itemText(i).toStdString());
+    }
+
+    const QString suggested = importedLayerDisplayName(table, xIndex, yIndex);
+    const bool shouldApply = autoNameMode_ || layerNameEdit_->text().trimmed().isEmpty() || layerNameEdit_->text() == autoSuggestedName_;
+    autoSuggestedName_ = suggested;
+    if (!shouldApply) return;
+
+    QSignalBlocker blocker(layerNameEdit_);
+    layerNameEdit_->setText(suggested);
+    autoNameMode_ = true;
+}
+
+void ImportDialog::onLayerNameEdited(const QString& text) {
+    autoNameMode_ = text.trimmed().isEmpty() || text == autoSuggestedName_;
+}
 
 } // namespace plotapp::ui

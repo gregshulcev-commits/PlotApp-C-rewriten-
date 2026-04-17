@@ -1,5 +1,8 @@
 #include "PluginRunDialog.h"
 
+#include "DialogUtil.h"
+
+#include <QCheckBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QHBoxLayout>
@@ -47,6 +50,7 @@ PluginRunDialog::PluginRunDialog(const std::vector<plotapp::PluginInfo>& plugins
                                  QWidget* parent)
     : QDialog(parent), sourceLayer_(sourceLayer), plugins_(plugins) {
     setWindowTitle("Apply plugin");
+    applyDialogWindowSize(this, QSize(900, 520), QSize(720, 440));
     auto* layout = new QVBoxLayout(this);
 
     pluginBox_ = new QComboBox(this);
@@ -75,6 +79,14 @@ PluginRunDialog::PluginRunDialog(const std::vector<plotapp::PluginInfo>& plugins
     degreeLayout->addWidget(degreeSpin_);
     degreeLayout->addStretch();
     layout->addWidget(degreeRow_);
+
+    linearFitRow_ = new QWidget(this);
+    auto* linearFitLayout = new QHBoxLayout(linearFitRow_);
+    linearFitLayout->setContentsMargins(0, 0, 0, 0);
+    linearFitAxisIntersectionsCheck_ = new QCheckBox("Show intersections with the X and Y axes", linearFitRow_);
+    linearFitLayout->addWidget(linearFitAxisIntersectionsCheck_);
+    linearFitLayout->addStretch();
+    layout->addWidget(linearFitRow_);
 
     errorColumnRow_ = new QWidget(this);
     auto* errorLayout = new QHBoxLayout(errorColumnRow_);
@@ -117,6 +129,9 @@ QString PluginRunDialog::params() const {
     if (id == "newton_polynomial") {
         out = upsertParam(out, "degree", QString::number(degreeSpin_->value()));
     }
+    if (id == "linear_fit") {
+        out = upsertParam(out, "show_axis_intersections", linearFitAxisIntersectionsCheck_ != nullptr && linearFitAxisIntersectionsCheck_->isChecked() ? "1" : "0");
+    }
     if (id == "error_bars") {
         const int columnIndex = errorColumnBox_->currentData().toInt();
         if (columnIndex >= 0) {
@@ -131,6 +146,7 @@ void PluginRunDialog::updateDescription() {
     if (index < 0 || static_cast<std::size_t>(index) >= plugins_.size()) {
         descriptionLabel_->setText({});
         degreeRow_->hide();
+        linearFitRow_->hide();
         errorColumnRow_->hide();
         errorColumnHint_->hide();
         return;
@@ -148,6 +164,14 @@ void PluginRunDialog::updateDescription() {
         bool ok = false;
         const int degree = std::clamp(paramValue(defaultParams, "degree").toInt(&ok), 1, 12);
         degreeSpin_->setValue(ok ? degree : 2);
+    }
+
+    const bool showLinearFitOptions = id == "linear_fit";
+    linearFitRow_->setVisible(showLinearFitOptions);
+    if (showLinearFitOptions) {
+        const QString value = paramValue(defaultParams, "show_axis_intersections").trimmed().toLower();
+        const bool enabled = value == "1" || value == "true" || value == "yes" || value == "on";
+        linearFitAxisIntersectionsCheck_->setChecked(enabled);
     }
 
     const bool showErrorColumn = id == "error_bars";

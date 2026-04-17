@@ -1,5 +1,7 @@
 # Plugin API
 
+For the full step-by-step authoring guide in Russian, see **`docs/PLUGIN_AUTHORING_RU.md`**.
+
 The stable plugin boundary is defined in `include/plotapp/PluginApi.h`.
 
 ## Contract
@@ -84,6 +86,69 @@ Current in-tree examples include:
 3. Export the required symbols.
 4. Build the shared library into the `plugins/` output directory.
 5. Restart the app or reload plugins from the UI.
+
+## Practical authoring checklist
+
+When you create a plugin, follow this order:
+
+1. Pick a **stable plugin id**. It is stored in project files, so changing it later breaks recompute compatibility.
+2. Decide what the plugin consumes:
+   - all source points,
+   - or the subset already filtered by the desktop selection.
+3. Decide what parameters you want in the `key=value;key=value` string.
+4. Return a suggested layer name that helps the user understand the result.
+5. Make sure `plotapp_free_result` frees **everything** allocated in `plotapp_run`.
+6. Drop the resulting `.so` into the plugin search directory and reload plugins.
+
+## Parameter-string convention
+
+The core treats `params` as an opaque string. A plugin can define its own convention, but the repository uses this style consistently:
+
+- `key=value`
+- pairs separated by `;`
+- examples:
+  - `samples=128`
+  - `degree=3;samples=200`
+  - `window=5;tolerance=0.1`
+  - `show_axis_intersections=1`
+
+Recommendations:
+- keep names lowercase with underscores;
+- choose safe defaults when a key is missing;
+- ignore unknown keys instead of failing unless the plugin really cannot proceed.
+
+## Result-shape recommendations
+
+The ABI only returns points, a suggested layer name, and an optional warning string. The core then decides how to style the derived layer.
+
+That means:
+- if your plugin returns a continuous curve, emit points ordered by `x` and let the core connect them;
+- if your plugin returns marker-like data, emit only the important points;
+- keep the number of generated points reasonable for interactivity and project-file size.
+
+## Memory-management rules
+
+Inside `plotapp_run`:
+- allocate returned arrays/strings with `malloc` / `std::malloc`;
+- never return pointers to local variables or `std::string::c_str()` storage;
+- initialize unused result fields to `nullptr` / `0`.
+
+Inside `plotapp_free_result`:
+- `free(result->points)`
+- `free(result->suggested_layer_name)`
+- `free(result->warning_message)`
+- reset the pointers to `nullptr`
+- reset `point_count` to `0`
+
+## UI integration note
+
+The current desktop UI can add plugin-specific controls without changing the ABI.
+Example: `linear_fit` now exposes a desktop checkbox that writes `show_axis_intersections=1` into the existing parameter string.
+
+This means you can often extend a plugin by:
+1. adding a new optional parameter in the plugin itself;
+2. teaching the plugin dialog to write that parameter;
+3. leaving the ABI unchanged.
 
 ## Compatibility note
 

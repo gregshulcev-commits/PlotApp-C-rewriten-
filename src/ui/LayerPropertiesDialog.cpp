@@ -1,5 +1,7 @@
 #include "LayerPropertiesDialog.h"
 
+#include "DialogUtil.h"
+
 #include "plotapp/FormulaEvaluator.h"
 
 #include <QCheckBox>
@@ -40,6 +42,7 @@ QWidget* makeColorRow(QWidget* parent, QLineEdit** editOut, QPushButton** button
 LayerPropertiesDialog::LayerPropertiesDialog(plotapp::Layer layer, QWidget* parent)
     : QDialog(parent), layer_(std::move(layer)) {
     setWindowTitle("Layer properties");
+    applyDialogWindowSize(this, QSize(900, 620), QSize(760, 520));
     auto* layout = new QVBoxLayout(this);
     auto* form = new QFormLayout();
 

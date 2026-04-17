@@ -8,6 +8,7 @@
 class QComboBox;
 class QLabel;
 class QLineEdit;
+class QCheckBox;
 class QSpinBox;
 class QWidget;
 
@@ -34,6 +35,8 @@ private:
     QLineEdit* paramsEdit_ {nullptr};
     QWidget* degreeRow_ {nullptr};
     QSpinBox* degreeSpin_ {nullptr};
+    QWidget* linearFitRow_ {nullptr};
+    QCheckBox* linearFitAxisIntersectionsCheck_ {nullptr};
     QWidget* errorColumnRow_ {nullptr};
     QComboBox* errorColumnBox_ {nullptr};
     QLabel* errorColumnHint_ {nullptr};

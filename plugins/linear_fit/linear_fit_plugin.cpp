@@ -1,9 +1,11 @@
 #include "plotapp/PluginApi.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstring>
 #include <cstdlib>
+#include <limits>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -25,10 +27,27 @@ int parseSamples(const char* params) {
     return std::max(2, std::stoi(text.substr(pos + 8)));
 }
 
+bool parseBoolParam(const char* params, const char* key, bool fallback) {
+    if (!params || !key || std::strlen(params) == 0 || std::strlen(key) == 0) return fallback;
+    const std::string text(params);
+    const std::string pattern = std::string(key) + "=";
+    const std::size_t pos = text.find(pattern);
+    if (pos == std::string::npos) return fallback;
+    std::string value = text.substr(pos + pattern.size());
+    const std::size_t end = value.find(';');
+    if (end != std::string::npos) value = value.substr(0, end);
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    if (value == "1" || value == "true" || value == "yes" || value == "on") return true;
+    if (value == "0" || value == "false" || value == "no" || value == "off") return false;
+    return fallback;
+}
+
 } // namespace
 
 extern "C" PlotAppPluginMetadata plotapp_get_metadata() {
-    return PlotAppPluginMetadata{PLOTAPP_PLUGIN_API_VERSION, "linear_fit", "Linear approximation", "Least-squares straight line through the selected source layer.", "samples=128"};
+    return PlotAppPluginMetadata{PLOTAPP_PLUGIN_API_VERSION, "linear_fit", "Linear approximation", "Least-squares straight line through the selected source layer. Optional setting: extend the result to show intersections with the X and Y axes.", "samples=128;show_axis_intersections=0"};
 }
 
 extern "C" int plotapp_run(const PlotAppPluginRequest* request, PlotAppPluginResult* result) {
@@ -54,6 +73,19 @@ extern "C" int plotapp_run(const PlotAppPluginRequest* request, PlotAppPluginRes
     double b = (sumY - a * sumX) / static_cast<double>(n);
 
     int samples = parseSamples(request->params);
+    const bool showAxisIntersections = parseBoolParam(request->params, "show_axis_intersections", false);
+    if (showAxisIntersections) {
+        minX = std::min(minX, 0.0);
+        maxX = std::max(maxX, 0.0);
+        if (std::fabs(a) >= 1e-12) {
+            const double xIntercept = -b / a;
+            if (std::isfinite(xIntercept)) {
+                minX = std::min(minX, xIntercept);
+                maxX = std::max(maxX, xIntercept);
+            }
+        }
+    }
+
     result->point_count = static_cast<std::size_t>(samples);
     result->points = static_cast<PlotAppPoint*>(std::malloc(sizeof(PlotAppPoint) * result->point_count));
     if (!result->points) return 3;

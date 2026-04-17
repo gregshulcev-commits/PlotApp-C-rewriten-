@@ -21,6 +21,8 @@ public:
     void setSuggestedRange(double xMin, double xMax);
 
 private slots:
+    void updateSuggestedLayerName();
+    void onLayerNameEdited(const QString& text);
     void validateAndAccept();
 
 private:
@@ -29,6 +31,8 @@ private:
     QDoubleSpinBox* xMinSpin_ {nullptr};
     QDoubleSpinBox* xMaxSpin_ {nullptr};
     QSpinBox* samplesSpin_ {nullptr};
+    QString autoSuggestedName_;
+    bool autoNameMode_ {true};
 };
 
 } // namespace plotapp::ui

@@ -33,8 +33,7 @@ private slots:
     void editYAxisInline();
     void saveProject();
     void openProject();
-    void exportPng();
-    void exportSvg();
+    void exportImage();
     void openSettingsDialog();
     void runSelectedPlugin();
     void editSelectedLayer();
@@ -52,6 +51,7 @@ private slots:
     void setUiScale115();
     void setUiScale130();
     void resetView();
+    void clearCurrentSelection();
 
 private:
     QString selectedLayerId() const;

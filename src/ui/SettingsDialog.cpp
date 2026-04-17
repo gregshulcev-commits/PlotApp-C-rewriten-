@@ -1,5 +1,7 @@
 #include "SettingsDialog.h"
 
+#include "DialogUtil.h"
+
 #include "plotapp/BuildInfo.h"
 #include "plotapp/ManagedInstall.h"
 
@@ -47,7 +49,7 @@ bool pathStartsWith(const std::filesystem::path& value, const std::filesystem::p
 
 SettingsDialog::SettingsDialog(const QString& theme, int scalePercent, QWidget* parent) : QDialog(parent) {
     setWindowTitle("Settings");
-    resize(760, 560);
+    applyDialogWindowSize(this, QSize(860, 620), QSize(720, 500));
 
     auto* layout = new QVBoxLayout(this);
     auto* tabs = new QTabWidget(this);

@@ -60,8 +60,10 @@ The Qt UI is a thin shell above the controller.
 It adds:
 - a real plot window
 - dialogs for file import and plugin execution
+- a unified image export dialog with preview and format selection
 - layer visibility toggles
 - rectangular point selection for the currently selected layer
+- `Esc`-driven selection clearing across the tree/canvas workflow
 - an integrated command console
 - a settings dialog that can surface managed-install version/update metadata
 
@@ -81,6 +83,8 @@ Current layer tree selection
 This satisfies two important constraints:
 1. a plugin cannot be accidentally applied to multiple layers at once;
 2. reopening/recomputing a derived layer uses the same source subset instead of silently falling back to the entire original layer.
+
+The desktop layer selection can also be cleared explicitly with `Esc`, which resets both the selected tree item and the selected source-point subset.
 
 ## Role metadata scope
 
@@ -113,6 +117,7 @@ File path
  -> importer selection by extension
  -> tabular preview
  -> user column selection
+ -> default layer naming (`Y vs X`)
  -> numeric extraction
  -> raw layer creation
 ```
@@ -122,12 +127,26 @@ File path
 ```text
 Expression + X range + sample count
  -> validation
+ -> default layer naming from the expression
  -> stored formula metadata
  -> sampled points for persistence
  -> viewport-aware re-sampling in the renderer
 ```
 
 The desktop formula dialog now seeds the default X range from the current viewport when data already exists, and adding a formula layer no longer forcibly resets the viewport for an existing project.
+
+## Export pipeline
+
+```text
+Current project + current viewport
+ -> Export dialog
+ -> format selection (PNG/SVG)
+ -> size preset selection (Current/A4 portrait/A4 landscape/Custom)
+ -> preview rendering from the canvas composition
+ -> file write via PNG raster export or SvgRenderer
+```
+
+This keeps raster and vector export in a single user workflow while still delegating final SVG generation to the headless renderer.
 
 ## Rendering split
 

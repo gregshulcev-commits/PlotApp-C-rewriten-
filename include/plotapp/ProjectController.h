@@ -32,7 +32,7 @@ public:
 
     void saveProject(const std::string& path) const;
     void openProject(const std::string& path);
-    void exportSvg(const std::string& path) const;
+    void exportSvg(const std::string& path, int width = 1280, int height = 720) const;
 
 private:
     const Importer& resolveImporter(const std::string& path) const;

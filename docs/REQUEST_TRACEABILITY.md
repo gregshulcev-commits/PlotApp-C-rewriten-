@@ -31,10 +31,30 @@ This file maps the latest requested changes to the current source update.
 - `src/core/FormulaEvaluator.cpp` fixes precedence for unary minus vs exponentiation (`-x^2`)
 - `src/ui/PlotCanvasWidget.cpp` and `src/render/SvgRenderer.cpp` include error-bar height in bounds calculations
 
-## 6. Update documentation for the new behavior
+## 6. Add `Esc`-based clearing of the active selection
+- `src/ui/MainWindow.cpp` now binds `Esc` to a full tree/canvas selection reset
+- `src/ui/PlotCanvasWidget.*` adds `clearSelection()` so the highlighted layer/point subset disappears immediately
+
+## 7. Default legend text and layer names
+- `src/core/ProjectController.cpp` now defaults formula layers to the formula expression itself
+- `src/core/ProjectController.cpp` now defaults imported layers to `Y vs X` based on the selected columns
+- `src/ui/ImportDialog.*` and `src/ui/FormulaLayerDialog.*` auto-fill those defaults in the dialogs so the user sees them before confirming
+
+## 8. Make popup dialogs medium-sized and improve export UX
+- `src/ui/DialogUtil.h` centralizes default dialog sizing
+- the main user dialogs now use medium-sized default windows instead of very small popups
+- `src/ui/ExportDialog.*` adds a unified export workflow with format selection, A4 presets, DPI, and preview
+- `src/ui/MainWindow.cpp` replaces the separate desktop PNG/SVG actions with one export entry point
+
+## 9. Add a desktop option for linear approximation axis intersections
+- `plugins/linear_fit/linear_fit_plugin.cpp` accepts `show_axis_intersections=1`
+- `src/ui/PluginRunDialog.*` adds the plugin-specific control and writes the parameter back into the existing param string
+
+## 10. Update documentation for the new behavior
 - updated: `README.md`
 - updated: `docs/USER_GUIDE.md`
 - updated: `docs/ARCHITECTURE.md`
 - updated: `docs/PLUGIN_API.md`
+- added: `docs/PLUGIN_AUTHORING_RU.md`
 - updated: `docs/STATUS_AND_GAPS.md`
 - added: `docs/CHANGELOG_RU.md`

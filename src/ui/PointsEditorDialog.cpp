@@ -1,5 +1,7 @@
 #include "PointsEditorDialog.h"
 
+#include "DialogUtil.h"
+
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QHeaderView>
@@ -62,6 +64,7 @@ QTableWidgetItem* makeReadOnlyItem(const QString& text) {
 PointsEditorDialog::PointsEditorDialog(plotapp::Layer layer, QWidget* parent)
     : QDialog(parent), layer_(std::move(layer)), roleEditingEnabled_(plotapp::layerSupportsPointRoles(layer_)) {
     setWindowTitle("Edit points");
+    applyDialogWindowSize(this, QSize(960, 640), QSize(780, 520));
     auto* layout = new QVBoxLayout(this);
     table_ = new QTableWidget(this);
     table_->setColumnCount(5);
@@ -85,6 +88,7 @@ PointsEditorDialog::PointsEditorDialog(plotapp::Layer layer, QWidget* parent)
     table_->horizontalHeader()->setSectionResizeMode(kColumnVisible, QHeaderView::ResizeToContents);
     table_->horizontalHeader()->setSectionResizeMode(kColumnRole, QHeaderView::ResizeToContents);
     table_->horizontalHeader()->setSectionResizeMode(kColumnSourceRow, QHeaderView::ResizeToContents);
+    table_->setMinimumHeight(360);
     layout->addWidget(table_);
 
     auto* tools = new QHBoxLayout();

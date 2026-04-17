@@ -149,6 +149,7 @@ QColor pointColorFor(const plotapp::Layer& layer, std::size_t sourceIndex) {
 PlotCanvasWidget::PlotCanvasWidget(QWidget* parent) : QWidget(parent) {
     setMinimumSize(700, 450);
     setMouseTracking(true);
+    setFocusPolicy(Qt::StrongFocus);
 }
 
 void PlotCanvasWidget::setProject(plotapp::Project* project) {
@@ -204,11 +205,42 @@ void PlotCanvasWidget::setProject(plotapp::Project* project) {
 }
 
 bool PlotCanvasWidget::exportPng(const QString& path) const {
-    QImage image(size(), QImage::Format_ARGB32_Premultiplied);
-    image.fill(palette().window().color());
-    QPainter painter(&image);
-    const_cast<PlotCanvasWidget*>(this)->render(&painter);
+    return exportPng(path, size());
+}
+
+bool PlotCanvasWidget::exportPng(const QString& path, const QSize& size, int dpi) const {
+    const QImage image = renderToImage(size, dpi);
     return image.save(path, "PNG");
+}
+
+QImage PlotCanvasWidget::renderToImage(const QSize& size, int dpi) const {
+    const QSize targetSize = size.expandedTo(QSize(32, 32));
+    QImage image(targetSize, QImage::Format_ARGB32_Premultiplied);
+    image.fill(palette().window().color());
+    if (dpi > 0) {
+        const double dotsPerMeter = static_cast<double>(dpi) / 0.0254;
+        image.setDotsPerMeterX(static_cast<int>(std::lround(dotsPerMeter)));
+        image.setDotsPerMeterY(static_cast<int>(std::lround(dotsPerMeter)));
+    }
+
+    PlotCanvasWidget preview;
+    preview.resize(targetSize);
+    preview.setPalette(palette());
+    preview.setFont(font());
+    preview.setProject(project_);
+    preview.viewXMin_ = viewXMin_;
+    preview.viewXMax_ = viewXMax_;
+    preview.viewYMin_ = viewYMin_;
+    preview.viewYMax_ = viewYMax_;
+    preview.selectedLayerId_.clear();
+    preview.selectedPointIndices_.clear();
+    preview.selectingPoints_ = false;
+    preview.draggingLegend_ = false;
+    preview.draggingView_ = false;
+
+    QPainter painter(&image);
+    preview.render(&painter);
+    return image;
 }
 
 void PlotCanvasWidget::setSelectedLayerId(const std::string& layerId) {
@@ -222,6 +254,17 @@ void PlotCanvasWidget::setSelectedLayerId(const std::string& layerId) {
 
     selectedLayerId_ = layerId;
     selectEntireCurrentLayer();
+}
+
+void PlotCanvasWidget::clearSelection() {
+    selectingPoints_ = false;
+    draggingView_ = false;
+    draggingLegend_ = false;
+    draggedLegendLayerId_.clear();
+    selectedLayerId_.clear();
+    selectedPointIndices_.clear();
+    emitPointSelectionChanged();
+    update();
 }
 
 bool PlotCanvasWidget::selectionCoversWholeLayer() const {
@@ -645,9 +688,19 @@ void PlotCanvasWidget::wheelEvent(QWheelEvent* event) {
     else zoomAt(event->position(), factor, factor);
 }
 
+void PlotCanvasWidget::keyPressEvent(QKeyEvent* event) {
+    if (event != nullptr && event->key() == Qt::Key_Escape) {
+        clearSelection();
+        event->accept();
+        return;
+    }
+    QWidget::keyPressEvent(event);
+}
+
 void PlotCanvasWidget::mousePressEvent(QMouseEvent* event) {
     pressMousePos_ = event->pos();
     lastMousePos_ = event->pos();
+    setFocus(Qt::MouseFocusReason);
     if (event->button() != Qt::LeftButton || !project_) return;
 
     if ((event->modifiers() & Qt::ShiftModifier) && plotRect().contains(event->pos()) && selectedLayer() != nullptr) {

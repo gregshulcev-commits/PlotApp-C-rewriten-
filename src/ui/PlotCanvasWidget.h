@@ -2,6 +2,8 @@
 
 #include "plotapp/Project.h"
 
+#include <QImage>
+#include <QKeyEvent>
 #include <QPoint>
 #include <QPointF>
 #include <QRectF>
@@ -21,6 +23,8 @@ public:
 
     void setProject(plotapp::Project* project);
     bool exportPng(const QString& path) const;
+    bool exportPng(const QString& path, const QSize& size, int dpi = 0) const;
+    QImage renderToImage(const QSize& size, int dpi = 0) const;
     void resetViewToProject();
 
     double viewXMin() const { return viewXMin_; }
@@ -33,6 +37,7 @@ public:
     const std::vector<std::size_t>& selectedPointIndices() const { return selectedPointIndices_; }
     bool selectionCoversWholeLayer() const;
     void selectEntireCurrentLayer();
+    void clearSelection();
 
 signals:
     void titleClicked();
@@ -43,6 +48,7 @@ signals:
 protected:
     void paintEvent(QPaintEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;

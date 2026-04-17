@@ -17,6 +17,27 @@
 namespace plotapp {
 namespace {
 
+std::string columnLabelFor(const TableData& table, std::size_t index) {
+    if (index < table.headers.size() && !text::trim(table.headers[index]).empty()) {
+        return text::trim(table.headers[index]);
+    }
+    return "Column " + std::to_string(index + 1);
+}
+
+std::string importedLayerDisplayName(const TableData& table, std::size_t xColumn, std::size_t yColumn) {
+    const auto xLabel = columnLabelFor(table, xColumn);
+    const auto yLabel = columnLabelFor(table, yColumn);
+    if (!xLabel.empty() && !yLabel.empty() && xLabel != yLabel) return yLabel + " vs " + xLabel;
+    if (!yLabel.empty()) return yLabel;
+    if (!xLabel.empty()) return xLabel;
+    const std::filesystem::path sourcePath(table.sourcePath);
+    return sourcePath.stem().empty() ? "Imported layer" : sourcePath.stem().string();
+}
+
+std::string defaultFormulaLayerName(const std::string& normalizedExpression) {
+    return normalizedExpression.empty() ? std::string("Formula") : normalizedExpression;
+}
+
 void normalizeFormulaLayerInputs(std::string& expression, double& xMin, double& xMax, int& samples) {
     expression = text::trim(expression);
     FormulaEvaluator::validate(expression);
@@ -206,7 +227,8 @@ TableData ProjectController::previewFile(const std::string& path) const {
 Layer& ProjectController::importLayer(const std::string& path, std::size_t xColumn, std::size_t yColumn, const std::string& layerName, std::optional<std::size_t> errorColumn) {
     auto table = previewFile(path);
     auto numeric = extractNumericSeries(table, xColumn, yColumn, errorColumn);
-    auto& layer = project_.createLayer(layerName.empty() ? std::filesystem::path(path).stem().string() : layerName, LayerType::RawSeries);
+    const std::string displayName = text::trim(layerName).empty() ? importedLayerDisplayName(table, xColumn, yColumn) : layerName;
+    auto& layer = project_.createLayer(displayName, LayerType::RawSeries);
     layer.points = std::move(numeric.points);
     layer.errorValues = std::move(numeric.errorValues);
     layer.importedSourcePath = table.sourcePath;
@@ -231,7 +253,8 @@ Layer& ProjectController::createFormulaLayer(const std::string& name, const std:
     std::string normalizedExpression = expression;
     normalizeFormulaLayerInputs(normalizedExpression, xMin, xMax, samples);
     auto points = FormulaEvaluator::sample(normalizedExpression, xMin, xMax, samples);
-    auto& layer = project_.createLayer(name.empty() ? "Formula" : name, LayerType::FormulaSeries);
+    const std::string displayName = text::trim(name).empty() ? defaultFormulaLayerName(normalizedExpression) : name;
+    auto& layer = project_.createLayer(displayName, LayerType::FormulaSeries);
     layer.formulaExpression = std::move(normalizedExpression);
     layer.formulaXMin = xMin;
     layer.formulaXMax = xMax;
@@ -239,7 +262,7 @@ Layer& ProjectController::createFormulaLayer(const std::string& name, const std:
     layer.style.showMarkers = false;
     layer.style.connectPoints = true;
     layer.points = std::move(points);
-    if (layer.legendText.empty()) layer.legendText = layer.name;
+    layer.legendText = layer.formulaExpression.empty() ? layer.name : layer.formulaExpression;
     return layer;
 }
 
@@ -249,7 +272,8 @@ void ProjectController::regenerateFormulaLayer(Layer& layer) {
     }
     normalizeFormulaLayerInputs(layer.formulaExpression, layer.formulaXMin, layer.formulaXMax, layer.formulaSamples);
     layer.points = FormulaEvaluator::sample(layer.formulaExpression, layer.formulaXMin, layer.formulaXMax, layer.formulaSamples);
-    if (layer.legendText.empty()) layer.legendText = layer.name;
+    if (text::trim(layer.name).empty()) layer.name = defaultFormulaLayerName(layer.formulaExpression);
+    if (layer.legendText.empty()) layer.legendText = layer.formulaExpression.empty() ? layer.name : layer.formulaExpression;
 }
 
 void ProjectController::addPoint(const std::string& layerId, Point point) {
@@ -343,8 +367,8 @@ void ProjectController::openProject(const std::string& path) {
     project_ = ProjectSerializer::load(path);
 }
 
-void ProjectController::exportSvg(const std::string& path) const {
-    SvgRenderer::renderToFile(project_, path);
+void ProjectController::exportSvg(const std::string& path, int width, int height) const {
+    SvgRenderer::renderToFile(project_, path, width, height);
 }
 
 } // namespace plotapp

@@ -96,6 +96,7 @@ if(PLOTAPP_BUILD_GUI)
             src/ui/PointsEditorDialog.cpp
             src/ui/PluginRunDialog.cpp
             src/ui/FormulaLayerDialog.cpp
+            src/ui/ExportDialog.cpp
             src/ui/SettingsDialog.cpp
             src/ui/TextEntryDialog.cpp
         )

@@ -211,6 +211,10 @@ void test_formula_evaluator_and_layer() {
     require(layer.points.size() == 21, "Formula layer sample size mismatch");
     require(layer.style.connectPoints, "Formula layer should stay continuous");
 
+    auto& defaultNamedLayer = controller.createFormulaLayer("", "exp(x)", -1.0, 1.0, 21);
+    require(defaultNamedLayer.name == "exp(x)", "Formula layer default name should follow the formula expression");
+    require(defaultNamedLayer.legendText == "exp(x)", "Formula layer legend should default to the formula expression");
+
     const auto beforeInvalid = controller.project().layers().size();
     bool threw = false;
     try {
@@ -497,8 +501,19 @@ void test_plugins_and_recompute() {
     auto& raw = controller.importLayer(csvPath.string(), 0, 1, "wave");
     const auto rawId = raw.id;
 
+    auto& defaultImported = controller.importLayer(csvPath.string(), 0, 1);
+    require(defaultImported.name == "y vs x", "Imported layer default name should use the selected columns");
+    require(defaultImported.legendText == "y vs x", "Imported layer legend should default to the selected columns");
+
     auto& derived = controller.applyPlugin("linear_fit", rawId, "samples=8");
     require(derived.points.size() == 8, "Derived layer sample count mismatch");
+
+    auto& axisSource = controller.createManualLayer("axis_source");
+    axisSource.points = {{1.0, 3.0}, {2.0, 5.0}, {3.0, 7.0}};
+    auto& derivedWithAxes = controller.applyPlugin("linear_fit", axisSource.id, "samples=8;show_axis_intersections=1");
+    require(derivedWithAxes.points.size() == 8, "Linear fit with axis intersections should preserve sample count");
+    require(derivedWithAxes.points.front().x <= -0.5 + 1e-9, "Linear fit should extend to the X-axis intersection when requested");
+    require(derivedWithAxes.points.back().x >= 3.0 - 1e-9, "Linear fit should still cover the source range when axis intersections are enabled");
 
     auto& poly = controller.applyPlugin("newton_polynomial", rawId, "degree=3;samples=40");
     require(poly.points.size() == 40, "Configurable Newton plugin sample count mismatch");

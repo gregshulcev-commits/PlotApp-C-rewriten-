@@ -6,6 +6,8 @@
 - CLI build
 - automated tests via `ctest`
 - formula parser precedence fix (`-x^2`)
+- default formula/import layer naming rules in the controller
+- `linear_fit` axis-intersection option at the core/plugin level
 - selection-aware derived-layer provenance in project save/load/recompute
 - continuous derived-layer viewport sampling from the stored source subset
 - error-bar bounds in the headless SVG pipeline
@@ -16,6 +18,8 @@
 - interactive rectangular point selection UX in `PlotCanvasWidget`
 - layer-tree click/reclick behavior for whole-layer reselection
 - formula dialog seeding from the current viewport inside a live Qt session
+- `Esc` clearing of the tree/canvas selection in a live Qt session
+- unified export dialog behavior (preview, A4 presets, PNG/SVG format selection)
 - point-editor visibility of the `Role` column only for extrema layers
 
 ## Reason

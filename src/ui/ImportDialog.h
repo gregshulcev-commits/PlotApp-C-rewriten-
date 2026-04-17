@@ -19,11 +19,17 @@ public:
     std::size_t yColumn() const;
     QString layerName() const;
 
+private slots:
+    void updateSuggestedLayerName();
+    void onLayerNameEdited(const QString& text);
+
 private:
     QComboBox* xColumnBox_ {nullptr};
     QComboBox* yColumnBox_ {nullptr};
     QLineEdit* layerNameEdit_ {nullptr};
     QTableWidget* previewTable_ {nullptr};
+    QString autoSuggestedName_;
+    bool autoNameMode_ {true};
 };
 
 } // namespace plotapp::ui

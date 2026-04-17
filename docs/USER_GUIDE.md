@@ -14,6 +14,7 @@
 - `Shift + wheel`: X-only zoom
 - `Ctrl + wheel`: Y-only zoom
 - `Shift + left drag`: rectangular point selection for the currently selected layer
+- `Esc`: clear the current layer selection and point selection
 - click title / X label / Y label: edit text inline
 - drag legend box: move the legend for that layer
 
@@ -22,9 +23,16 @@
 - plugin-generated layers appear as child items below the source layer
 - the tree uses **single selection** for plugin targeting
 - clicking a layer selects that one layer and resets the point selection to the full layer
+- pressing `Esc` clears the current tree/canvas selection and removes the bold selected-layer highlight from the plot
 - toggle the checkbox to hide/show the layer
 - double-click a layer to open its properties dialog
 - the properties dialog also contains a destructive action to delete the layer
+
+## Default names and legend text
+- imported layers default to `Y vs X` using the selected column headers
+- formula layers default to the formula expression itself
+- the default legend text follows the same rule as the default layer name
+- you can still override the layer name and legend text manually in the properties dialog
 
 ## Point selection and plugins
 - plugins are applied to **one selected layer only**
@@ -32,6 +40,24 @@
 - if no rectangle is drawn, the full layer remains selected
 - formula layers are treated as whole-layer selections when chosen in the tree; their stored sample points can also be restricted with rectangular selection if needed
 - derived layers remember which source points were used, so reopening the project and recomputing keeps the same plugin input subset
+
+## Exporting images
+Use **File -> Export image...**.
+
+The export dialog combines both raster and vector export into one place:
+- choose **PNG** or **SVG**
+- choose one of the size presets:
+  - **Current canvas size**
+  - **A4 portrait**
+  - **A4 landscape**
+  - **Custom**
+- adjust **DPI** for A4/print-oriented exports
+- inspect the preview before writing the file
+
+Notes:
+- PNG uses the selected pixel size directly;
+- SVG remains vector output, but the preview shows the same aspect ratio and composition;
+- A4 presets are useful when you want an export that already matches a printable page size.
 
 ## Role / min-max layers
 `Role` is no longer treated as a global point attribute.
@@ -64,11 +90,18 @@ There are two ways to work with error bars:
 Error values are stored as total error height, so an error value of `1.0` is rendered as `+0.5 / -0.5` around the point.
 Bounds and SVG export now account for the full error-bar height.
 
+## Linear approximation plugin
+The `linear_fit` plugin now has an extra desktop option:
+- **Show intersections with the X and Y axes**
+
+When enabled, the fitted line is extended so that the exported/visible line can include the intercepts with the axes.
+
 ## Formula layers
 Formula layers are stored as expressions but rendered across the *currently visible* X-range in the UI, so panning/zooming re-samples the curve for the visible plot window.
 
 Important behavior:
 - the formula dialog now starts from the **current visible X-range** when the project already contains data;
+- the formula-layer name defaults to the formula expression, and the legend text does the same;
 - adding a formula layer to an existing project no longer forcibly resets the viewport, which avoids the common `exp(x)` “huge Y scale collapses everything” problem;
 - exponentiation binds tighter than unary minus, so `-x^2` is parsed as `-(x^2)`.
 

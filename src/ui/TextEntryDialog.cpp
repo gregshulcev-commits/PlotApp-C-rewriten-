@@ -1,5 +1,7 @@
 #include "TextEntryDialog.h"
 
+#include "DialogUtil.h"
+
 #include <QDialogButtonBox>
 #include <QLabel>
 #include <QLineEdit>
@@ -16,6 +18,7 @@ QString latexHintText(const QString& text) {
 TextEntryDialog::TextEntryDialog(const QString& title, const QString& label, const QString& value, QWidget* parent)
     : QDialog(parent) {
     setWindowTitle(title);
+    applyDialogWindowSize(this, QSize(760, 280), QSize(640, 220));
     auto* layout = new QVBoxLayout(this);
     label_ = new QLabel(label, this);
     edit_ = new QLineEdit(value, this);

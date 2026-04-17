@@ -2,16 +2,23 @@
 
 PlotApp is a modular plotting application built around a C++17 core, a CLI/command-console workflow, and a Qt6 desktop UI wrapper.
 
-This revision keeps the layered architecture intact and focuses on plugin-targeted selection, formula-UX fixes, and safer persistence of derived-layer provenance.
+This revision keeps the layered architecture intact and focuses on plugin-targeted selection, formula-UX fixes, export ergonomics, and safer persistence of derived-layer provenance.
 
 ## What changed in this update
 
 - `Role` is now treated as plugin-specific metadata instead of a global point attribute:
   - the point editor only exposes **Role** for the `local_extrema` / min-max layer;
   - legends and point coloring only interpret `pointRoles` for that plugin.
+- `Esc` now clears the active desktop selection:
+  - the current layer selection is removed;
+  - the point subset selection is cleared;
+  - the selected graph is no longer drawn with a bold highlight.
 - fixed the common `exp(x)` workflow problem in the UI:
   - when a formula layer is added to a project that already has visible data, the formula dialog is seeded from the **current X viewport** instead of always defaulting to `[-10, 10]`;
   - adding a formula layer no longer forcibly resets the viewport for an existing project, so very large functions such as `exp(x)` do not immediately collapse the rest of the plot.
+- improved default layer naming and legend text:
+  - formula layers default to the **formula expression** for both the layer name and the legend;
+  - imported layers default to **`Y vs X`** based on the selected table columns.
 - fixed formula parser precedence so `-x^2` is interpreted as `-(x^2)` instead of `(-x)^2`.
 - fixed plot bounds for error bars in both the interactive canvas and SVG export.
 - added single-layer, selection-aware plugin execution in the desktop workflow:
@@ -21,6 +28,11 @@ This revision keeps the layered architecture intact and focuses on plugin-target
   - applying a plugin now uses the selected subset of source points instead of silently using the full layer.
 - derived-layer provenance now persists the selected source-point indices in the project file, so saving/reopening/recomputing keeps the same plugin input subset.
 - continuous derived-layer viewport sampling now honors the stored source subset, which keeps recomputed fits/splines consistent with the original plugin run.
+- replaced the separate desktop PNG/SVG actions with a single **Export image...** workflow:
+  - choose **PNG** or **SVG** in one dialog;
+  - choose **Current canvas**, **A4 portrait**, **A4 landscape**, or **Custom** export size;
+  - preview the composition before saving.
+- the `linear_fit` plugin now exposes a desktop option to extend the fitted line so it shows intersections with the **X** and **Y** axes.
 - project save/load format was extended to store derived-layer source selections while remaining backward-compatible with older project files.
 
 ## Build
@@ -65,7 +77,15 @@ GUI:
 - Drag legend box: move that layer's legend
 - Click title / X label / Y label: edit text inline
 - Click a layer in the layer tree: select that one layer as the current plugin target and select all of its points
+- `Esc`: clear the current layer/point selection and remove the selection highlight
 - `Ctrl + S`: save project
+
+## Export
+- use **File -> Export image...**
+- choose **PNG** or **SVG** in one dialog
+- presets: **Current canvas**, **A4 portrait**, **A4 landscape**, **Custom**
+- the dialog shows a preview before the file is written
+- for print/export workflows, the A4 presets compute pixel dimensions from the selected DPI
 
 ## Formula syntax
 Examples:
@@ -85,6 +105,12 @@ Notes:
 - exponentiation binds tighter than unary minus, so `-x^2` means `-(x^2)`;
 - the formula-layer dialog uses the current visible X-range as the default source range when a project already contains data;
 - adding a formula layer to an existing project keeps the current viewport instead of automatically resetting to the new formula bounds.
+
+## Plugin authoring
+The repository now includes a detailed step-by-step guide for writing plugins without learning the entire core first:
+
+- `docs/PLUGIN_AUTHORING_RU.md` — detailed Russian guide with folder layout, ABI rules, build steps, a template plugin, testing workflow, and common mistakes.
+- `docs/PLUGIN_API.md` — API/ABI reference.
 
 ## LaTeX-like labels
 The Qt canvas supports a lightweight LaTeX-like subset for title, axis labels and legend text:
@@ -136,4 +162,4 @@ When PlotApp is launched from a managed installation, the same workflow is also 
 
 ## Status note
 The core library, plugins, CLI, serializer changes, and automated tests were rebuilt and verified in the container.
-The desktop UI sources were updated for layer-bound selection, formula-range seeding, and point-role scoping. The container build in this session did **not** emit a runnable Qt desktop binary, so the new desktop interactions should still be smoke-tested on a real Qt workstation build.
+The desktop UI sources were updated for layer-bound selection, `Esc` clearing, formula-range seeding, naming defaults, unified export preview, and point-role scoping. The container build in this session did **not** emit a runnable Qt desktop binary, so the new desktop interactions should still be smoke-tested on a real Qt workstation build.

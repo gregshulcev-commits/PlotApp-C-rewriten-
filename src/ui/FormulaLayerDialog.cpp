@@ -1,5 +1,7 @@
 #include "FormulaLayerDialog.h"
 
+#include "DialogUtil.h"
+
 #include "plotapp/FormulaEvaluator.h"
 
 #include <QDialogButtonBox>
@@ -7,6 +9,7 @@
 #include <QFormLayout>
 #include <QLineEdit>
 #include <QMessageBox>
+#include <QSignalBlocker>
 #include <QSpinBox>
 #include <QVBoxLayout>
 
@@ -18,10 +21,11 @@ namespace plotapp::ui {
 
 FormulaLayerDialog::FormulaLayerDialog(QWidget* parent) : QDialog(parent) {
     setWindowTitle("Add formula layer");
+    applyDialogWindowSize(this, QSize(860, 520), QSize(700, 420));
     auto* layout = new QVBoxLayout(this);
     auto* form = new QFormLayout();
-    nameEdit_ = new QLineEdit("Formula", this);
     expressionEdit_ = new QLineEdit("sin(x)", this);
+    nameEdit_ = new QLineEdit(expressionEdit_->text(), this);
     xMinSpin_ = new QDoubleSpinBox(this);
     xMaxSpin_ = new QDoubleSpinBox(this);
     samplesSpin_ = new QSpinBox(this);
@@ -40,6 +44,10 @@ FormulaLayerDialog::FormulaLayerDialog(QWidget* parent) : QDialog(parent) {
     form->addRow("Samples", samplesSpin_);
     layout->addLayout(form);
 
+    autoSuggestedName_ = expressionEdit_->text();
+    connect(expressionEdit_, &QLineEdit::textChanged, this, &FormulaLayerDialog::updateSuggestedLayerName);
+    connect(nameEdit_, &QLineEdit::textEdited, this, &FormulaLayerDialog::onLayerNameEdited);
+
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     connect(buttons, &QDialogButtonBox::accepted, this, &FormulaLayerDialog::validateAndAccept);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
@@ -51,6 +59,21 @@ QString FormulaLayerDialog::expression() const { return expressionEdit_->text();
 double FormulaLayerDialog::xMin() const { return xMinSpin_->value(); }
 double FormulaLayerDialog::xMax() const { return xMaxSpin_->value(); }
 int FormulaLayerDialog::samples() const { return samplesSpin_->value(); }
+
+void FormulaLayerDialog::updateSuggestedLayerName() {
+    const QString suggested = expressionEdit_->text().trimmed().isEmpty() ? QString("Formula") : expressionEdit_->text().trimmed();
+    const bool shouldApply = autoNameMode_ || nameEdit_->text().trimmed().isEmpty() || nameEdit_->text() == autoSuggestedName_;
+    autoSuggestedName_ = suggested;
+    if (!shouldApply) return;
+
+    QSignalBlocker blocker(nameEdit_);
+    nameEdit_->setText(suggested);
+    autoNameMode_ = true;
+}
+
+void FormulaLayerDialog::onLayerNameEdited(const QString& text) {
+    autoNameMode_ = text.trimmed().isEmpty() || text == autoSuggestedName_;
+}
 
 void FormulaLayerDialog::setSuggestedRange(double xMin, double xMax) {
     if (!std::isfinite(xMin) || !std::isfinite(xMax)) return;

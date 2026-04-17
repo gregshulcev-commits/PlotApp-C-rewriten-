@@ -1,5 +1,6 @@
 #include "MainWindow.h"
 
+#include "ExportDialog.h"
 #include "FormulaLayerDialog.h"
 #include "ImportDialog.h"
 #include "LayerPropertiesDialog.h"
@@ -22,6 +23,7 @@
 #include <QMessageBox>
 #include <QShortcut>
 #include <QStatusBar>
+#include <QSignalBlocker>
 #include <QStringListModel>
 #include <QTextEdit>
 #include <QToolBar>
@@ -49,6 +51,8 @@ MainWindow::MainWindow(QWidget* parent)
     connect(canvas_, &PlotCanvasWidget::xLabelClicked, this, &MainWindow::editXAxisInline);
     connect(canvas_, &PlotCanvasWidget::yLabelClicked, this, &MainWindow::editYAxisInline);
     connect(canvas_, &PlotCanvasWidget::pointSelectionChanged, this, &MainWindow::onPointSelectionChanged);
+    auto* clearSelectionShortcut = new QShortcut(QKeySequence(Qt::Key_Escape), this);
+    connect(clearSelectionShortcut, &QShortcut::activated, this, &MainWindow::clearCurrentSelection);
 
     buildDocks();
     buildMenus();
@@ -73,8 +77,7 @@ void MainWindow::buildMenus() {
     fileMenu->addSeparator();
     fileMenu->addAction("Import data...", this, &MainWindow::importData);
     fileMenu->addSeparator();
-    fileMenu->addAction("Export PNG...", this, &MainWindow::exportPng);
-    fileMenu->addAction("Export SVG...", this, &MainWindow::exportSvg);
+    fileMenu->addAction("Export image...", this, &MainWindow::exportImage);
     fileMenu->addSeparator();
     fileMenu->addAction("Settings...", this, &MainWindow::openSettingsDialog);
     fileMenu->addSeparator();
@@ -363,23 +366,26 @@ void MainWindow::openProject() {
     }
 }
 
-void MainWindow::exportPng() {
-    auto path = QFileDialog::getSaveFileName(this, "Export PNG", {}, "PNG image (*.png);;All files (*)");
-    if (path.isEmpty()) return;
-    if (!path.endsWith(".png")) path += ".png";
-    if (!canvas_->exportPng(path)) {
-        QMessageBox::warning(this, "Export PNG", "Failed to save PNG");
-    }
-}
+void MainWindow::exportImage() {
+    ExportDialog dialog(canvas_, this);
+    if (dialog.exec() != QDialog::Accepted) return;
 
-void MainWindow::exportSvg() {
-    auto path = QFileDialog::getSaveFileName(this, "Export SVG", {}, "SVG image (*.svg);;All files (*)");
+    auto path = QFileDialog::getSaveFileName(this, "Export image", {}, dialog.fileFilter());
     if (path.isEmpty()) return;
-    if (!path.endsWith(".svg")) path += ".svg";
+
+    const QString suffix = QStringLiteral(".") + dialog.defaultSuffix();
+    if (!path.endsWith(suffix, Qt::CaseInsensitive)) path += suffix;
+
     try {
-        controller_.exportSvg(path.toStdString());
+        if (dialog.format() == ExportDialog::FileFormat::Svg) {
+            controller_.exportSvg(path.toStdString(), dialog.widthPx(), dialog.heightPx());
+        } else if (!canvas_->exportPng(path, QSize(dialog.widthPx(), dialog.heightPx()), dialog.dpi())) {
+            QMessageBox::warning(this, "Export image", "Failed to save PNG");
+            return;
+        }
+        statusBar()->showMessage(QString("Exported %1").arg(path), 3000);
     } catch (const std::exception& ex) {
-        QMessageBox::warning(this, "Export SVG", ex.what());
+        QMessageBox::warning(this, "Export image", ex.what());
     }
 }
 
@@ -455,7 +461,16 @@ void MainWindow::editSelectedLayer() {
     }
 
     *layer = edited;
-    if (layer->legendText.empty()) layer->legendText = layer->name;
+    if (layer->type == LayerType::FormulaSeries) {
+        if (QString::fromStdString(layer->name).trimmed().isEmpty()) {
+            layer->name = layer->formulaExpression.empty() ? "Formula" : layer->formulaExpression;
+        }
+        if (layer->legendText.empty()) {
+            layer->legendText = layer->formulaExpression.empty() ? layer->name : layer->formulaExpression;
+        }
+    } else if (layer->legendText.empty()) {
+        layer->legendText = layer->name;
+    }
     refreshLayers();
 }
 
@@ -534,17 +549,29 @@ void MainWindow::onLayerDoubleClicked(QTreeWidgetItem*, int) {
     editSelectedLayer();
 }
 
+void MainWindow::clearCurrentSelection() {
+    if (layerTree_ != nullptr) {
+        QSignalBlocker blocker(layerTree_);
+        layerTree_->clearSelection();
+        layerTree_->setCurrentItem(nullptr);
+    }
+    if (canvas_ != nullptr) canvas_->clearSelection();
+    statusBar()->showMessage("Selection cleared", 2000);
+}
+
 void MainWindow::applyTheme(const QString& theme) {
     controller_.project().settings().uiTheme = theme.toStdString();
+    const QString messageBoxSizing = "QMessageBox QLabel { min-width: 520px; }";
     if (theme == "dark") {
-        qApp->setStyleSheet(
+        const QString darkStyle = QString(
             "QWidget { background: #202124; color: #e8eaed; }"
             "QLineEdit, QTextEdit, QTreeWidget, QTableWidget, QComboBox, QSpinBox, QDoubleSpinBox { background: #2b2c30; color: #e8eaed; border: 1px solid #5f6368; padding: 4px; }"
             "QMenuBar::item:selected, QMenu::item:selected { background: #3c4043; }"
             "QPushButton { background: #3c4043; border: 1px solid #5f6368; padding: 6px; }"
-        );
+        ) + messageBoxSizing;
+        qApp->setStyleSheet(darkStyle);
     } else {
-        qApp->setStyleSheet(QString());
+        qApp->setStyleSheet(messageBoxSizing);
     }
     canvas_->update();
 }

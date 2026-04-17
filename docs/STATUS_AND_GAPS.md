@@ -1,35 +1,34 @@
-# STATUS AND GAPS — fix bug v8
+# STATUS AND GAPS
 
 ## Verified in container
-- core build;
-- CLI build;
-- plugin build;
-- automated tests via `ctest`;
-- AddressSanitizer + UBSan test run;
-- build-version embedding from `VERSION.txt` into the compiled core;
-- managed-install manifest parsing and update-status parsing in the shared core layer;
-- rejection of formula layers with no finite samples;
-- rejection of non-finite numeric values from project files/import/manual point insertion;
-- rejection of oversized and non-regular `.plotapp` files plus per-layer point/table limits;
-- project save no longer uses a predictable `<project>.tmp` sidecar;
-- managed desktop entry rendering now escapes substitutions and quotes launcher paths/text fields;
-- shell passthrough disabled by default.
+- core build
+- plugin build
+- CLI build
+- automated tests via `ctest`
+- formula parser precedence fix (`-x^2`)
+- selection-aware derived-layer provenance in project save/load/recompute
+- continuous derived-layer viewport sampling from the stored source subset
+- error-bar bounds in the headless SVG pipeline
+- project roundtrip with persisted selected source-point indices
 
-## Implemented in source but not fully verified in container
-- full Qt6 desktop build and runtime behavior;
-- the new **Settings -> Updates** tab;
-- real GitHub network update flow through the GUI buttons.
+## Implemented in source but not fully verified in a real desktop session
+- full Qt desktop runtime behavior for the new selection workflow
+- interactive rectangular point selection UX in `PlotCanvasWidget`
+- layer-tree click/reclick behavior for whole-layer reselection
+- formula dialog seeding from the current viewport inside a live Qt session
+- point-editor visibility of the `Role` column only for extrema layers
 
 ## Reason
-- Qt6 development headers and libraries were not available in the container;
-- the container also does not provide a real desktop session or a real GitHub-connected workstation installation.
+The container session rebuilt and tested the non-Qt targets successfully, but it did not emit a runnable Qt desktop binary for interactive smoke-testing.
+The desktop source files were updated, however the new UX should still be checked on a real workstation build.
 
-## Highest remaining validation targets on a real Qt6 machine
-- `src/ui/SettingsDialog.cpp`
+## Highest remaining validation targets on a Qt workstation
 - `src/ui/MainWindow.cpp`
 - `src/ui/PlotCanvasWidget.cpp`
-- GNOME desktop install/update flow on a real workstation, including the GUI update tab and restart UX.
+- `src/ui/PointsEditorDialog.cpp`
+- `src/ui/FormulaLayerDialog.cpp`
 
 ## Architectural note
-- plugin loading is still a trusted-code boundary (`src/core/PluginManager.cpp`); this pass hardened validation around plugin results/params but did not redesign plugin isolation.
-- the GUI updater intentionally reuses `desktop_manager.sh update` instead of introducing a second update engine.
+- plugin loading remains a trusted-code boundary (`src/core/PluginManager.cpp`)
+- selection support was added without changing the plugin ABI; the core now filters the source-layer view before calling the plugin
+- derived layers now persist the selected source-point indices needed to recompute them faithfully

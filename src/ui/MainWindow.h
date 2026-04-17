@@ -42,6 +42,9 @@ private slots:
     void executeConsoleCommand();
     void completeConsoleCommand();
     void onLayerItemChanged(QTreeWidgetItem* item, int column);
+    void onCurrentLayerChanged(QTreeWidgetItem* current, QTreeWidgetItem* previous);
+    void onLayerItemClicked(QTreeWidgetItem* item, int column);
+    void onPointSelectionChanged(const QString& layerId, int selectedCount, int totalCount, bool wholeLayer);
     void onLayerDoubleClicked(QTreeWidgetItem* item, int column);
     void applyThemeLight();
     void applyThemeDark();

@@ -1,27 +1,44 @@
 # USER GUIDE
 
 ## Main workflow
-1. Import data from CSV/TXT/XLSX.
-2. Choose X/Y columns. In the GUI the import dialog no longer asks for an error column.
-3. Inspect the new layer in the layer tree.
-4. Add a formula layer or apply a plugin (including `error_bars`) to the selected source layer.
-5. Drag the legend for any visible layer to a convenient place.
-6. Save the project as `.plotapp` and reopen it later.
+1. Import data from CSV/TXT/XLSX or create a manual/formula layer.
+2. In the layer tree, select **exactly one** source layer.
+3. By default, selecting a layer selects the whole layer as the plugin input.
+4. Optionally restrict the input with `Shift + left drag` on the plot to select only the points that fall inside the rectangle for the currently selected layer.
+5. Apply a plugin to the selected layer. The plugin receives only that layer and only the currently selected subset of its points.
+6. Save the project as `.plotapp` and reopen it later. The selected source subset used by a derived layer is persisted and reused on recompute.
 
 ## Canvas controls
 - drag inside the plot area: pan
 - mouse wheel: zoom both axes
 - `Shift + wheel`: X-only zoom
 - `Ctrl + wheel`: Y-only zoom
+- `Shift + left drag`: rectangular point selection for the currently selected layer
 - click title / X label / Y label: edit text inline
 - drag legend box: move the legend for that layer
 
 ## Layer tree
 - source layers appear at top level
 - plugin-generated layers appear as child items below the source layer
+- the tree uses **single selection** for plugin targeting
+- clicking a layer selects that one layer and resets the point selection to the full layer
 - toggle the checkbox to hide/show the layer
 - double-click a layer to open its properties dialog
 - the properties dialog also contains a destructive action to delete the layer
+
+## Point selection and plugins
+- plugins are applied to **one selected layer only**
+- a rectangle selection affects only the layer currently selected in the tree
+- if no rectangle is drawn, the full layer remains selected
+- formula layers are treated as whole-layer selections when chosen in the tree; their stored sample points can also be restricted with rectangular selection if needed
+- derived layers remember which source points were used, so reopening the project and recomputing keeps the same plugin input subset
+
+## Role / min-max layers
+`Role` is no longer treated as a global point attribute.
+
+- the point editor exposes the **Role** column only for the `local_extrema` (min/max) plugin layer
+- legends only use the secondary role color for the extrema layer
+- raw layers and unrelated derived layers no longer show or interpret `Role`
 
 ## Console
 The built-in command console is a UI wrapper around the same command dispatcher used by the CLI.
@@ -45,9 +62,15 @@ There are two ways to work with error bars:
 - in the GUI, import the table normally and then apply the `error_bars` plugin to the selected layer, choosing a numeric imported column in the plugin dialog.
 
 Error values are stored as total error height, so an error value of `1.0` is rendered as `+0.5 / -0.5` around the point.
+Bounds and SVG export now account for the full error-bar height.
 
 ## Formula layers
 Formula layers are stored as expressions but rendered across the *currently visible* X-range in the UI, so panning/zooming re-samples the curve for the visible plot window.
+
+Important behavior:
+- the formula dialog now starts from the **current visible X-range** when the project already contains data;
+- adding a formula layer to an existing project no longer forcibly resets the viewport, which avoids the common `exp(x)` “huge Y scale collapses everything” problem;
+- exponentiation binds tighter than unary minus, so `-x^2` is parsed as `-(x^2)`.
 
 - Import and manual point entry reject non-finite numeric values such as `NaN` and `Inf`.
 - `.plotapp` loading rejects oversized/non-regular files and caps per-layer point/table payloads to reduce memory-exhaustion risk.

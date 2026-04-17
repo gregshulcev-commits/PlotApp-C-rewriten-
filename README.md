@@ -2,42 +2,26 @@
 
 PlotApp is a modular plotting application built around a C++17 core, a CLI/command-console workflow, and a Qt6 desktop UI wrapper.
 
-This revision keeps the layered architecture intact and focuses on bug fixing, security hardening, and a high-value managed-update feature in the Qt settings UI.
+This revision keeps the layered architecture intact and focuses on plugin-targeted selection, formula-UX fixes, and safer persistence of derived-layer provenance.
 
 ## What changed in this update
 
-- fixed broken automated tests caused by fragile relative paths;
-- hardened plugin discovery so the app no longer auto-loads arbitrary `.so` files from the current working directory;
-- added safer default plugin discovery relative to the executable, plus optional `PLOTAPP_PLUGIN_DIR` override;
-- added protection against duplicate plugin IDs and repeated `discover()` handle leaks;
-- improved delimited-text import:
-  - extensionless tabular files now work,
-  - delimiter detection is more robust,
-  - UTF-8 BOM is handled,
-  - simple decimal-comma numeric cells are accepted,
-  - obvious binary/image-like files are rejected as tabular data;
-- added XLSX entry-size limits to reduce ZIP-bomb style risk;
-- hardened project save/load:
-  - project header/version is validated,
-  - oversized and non-regular project files are rejected before parsing,
-  - per-project layer/point/table limits reduce `.plotapp` memory-exhaustion risk,
-  - malformed numeric fields report clearer errors,
-  - save now uses a unique adjacent temp file + atomic rename flow instead of a predictable `<project>.tmp` sidecar;
-- fixed CLI `formula` parsing so a layer name can be passed without explicitly providing the sample count;
-- formula layers that produce fewer than two finite points are now rejected instead of creating empty/broken layers;
-- NaN/Inf numeric input is now rejected in project files, imports, plugin numeric params, and manual point insertion;
-- improved SVG export:
-  - title/labels/legend text are XML-escaped,
-  - unsafe colors fall back to a safe default,
-  - formula layers are rendered from formula metadata over the current visible viewport,
-  - error bars are exported too;
-- added a dedicated **Settings -> Updates** tab in the Qt UI that shows:
-  - build version,
-  - installed version, install time, and installed Git commit from the managed-install manifest,
-  - configured repository/branch and latest remote commit after a check;
-- wired the new GUI buttons to the existing managed install workflow (`desktop_manager.sh update`) so GUI and shell updates stay consistent;
-- added shared build-info / managed-install manifest parsing utilities in the core layer plus regression tests for version embedding, manifest parsing, and update-status parsing;
-- extended tests to cover extensionless import, oversized/invalid project rejection, secure project-save temp naming, SVG escaping/sanitization, plugin rediscovery, formula-name parsing, and managed-install metadata parsing.
+- `Role` is now treated as plugin-specific metadata instead of a global point attribute:
+  - the point editor only exposes **Role** for the `local_extrema` / min-max layer;
+  - legends and point coloring only interpret `pointRoles` for that plugin.
+- fixed the common `exp(x)` workflow problem in the UI:
+  - when a formula layer is added to a project that already has visible data, the formula dialog is seeded from the **current X viewport** instead of always defaulting to `[-10, 10]`;
+  - adding a formula layer no longer forcibly resets the viewport for an existing project, so very large functions such as `exp(x)` do not immediately collapse the rest of the plot.
+- fixed formula parser precedence so `-x^2` is interpreted as `-(x^2)` instead of `(-x)^2`.
+- fixed plot bounds for error bars in both the interactive canvas and SVG export.
+- added single-layer, selection-aware plugin execution in the desktop workflow:
+  - selecting a layer in the layer tree selects that one layer as the only plugin target;
+  - clicking a layer selects its full point set (or the whole formula layer);
+  - `Shift + left drag` on the plot performs rectangular point selection **only for the currently selected layer**;
+  - applying a plugin now uses the selected subset of source points instead of silently using the full layer.
+- derived-layer provenance now persists the selected source-point indices in the project file, so saving/reopening/recomputing keeps the same plugin input subset.
+- continuous derived-layer viewport sampling now honors the stored source subset, which keeps recomputed fits/splines consistent with the original plugin run.
+- project save/load format was extended to store derived-layer source selections while remaining backward-compatible with older project files.
 
 ## Build
 
@@ -77,8 +61,10 @@ GUI:
 - Mouse wheel: zoom both axes
 - `Shift + wheel`: X-axis zoom only
 - `Ctrl + wheel`: Y-axis zoom only
+- `Shift + left drag` on the plot: rectangular point selection for the currently selected layer
 - Drag legend box: move that layer's legend
 - Click title / X label / Y label: edit text inline
+- Click a layer in the layer tree: select that one layer as the current plugin target and select all of its points
 - `Ctrl + S`: save project
 
 ## Formula syntax
@@ -94,6 +80,11 @@ Supported:
 - operators: `+ - * / ^`
 - constants: `pi`, `e`
 - functions: `sin cos tan asin acos atan sqrt abs exp log ln log10 floor ceil`
+
+Notes:
+- exponentiation binds tighter than unary minus, so `-x^2` means `-(x^2)`;
+- the formula-layer dialog uses the current visible X-range as the default source range when a project already contains data;
+- adding a formula layer to an existing project keeps the current viewport instead of automatically resetting to the new formula bounds.
 
 ## LaTeX-like labels
 The Qt canvas supports a lightweight LaTeX-like subset for title, axis labels and legend text:
@@ -144,6 +135,5 @@ See `docs/MANAGED_INSTALL.md` for the full layout, manifest format, update workf
 When PlotApp is launched from a managed installation, the same workflow is also available in **File -> Settings -> Updates**.
 
 ## Status note
-The core, CLI, serializers, formula engine, importers, plugins and automated tests were rebuilt and verified in the container.
-The Qt6 UI source is included and updated with the new **Settings -> Updates** tab, but it was **not fully compiled in the container** because the container did not provide Qt6 development packages.
-See `docs/STATUS_AND_GAPS.md`.
+The core library, plugins, CLI, serializer changes, and automated tests were rebuilt and verified in the container.
+The desktop UI sources were updated for layer-bound selection, formula-range seeding, and point-role scoping. The container build in this session did **not** emit a runnable Qt desktop binary, so the new desktop interactions should still be smoke-tested on a real Qt workstation build.

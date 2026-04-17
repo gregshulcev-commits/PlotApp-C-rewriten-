@@ -46,6 +46,17 @@ const Layer* resolveSourceLayer(const Project& project, const Layer& layer) {
     return nullptr;
 }
 
+std::vector<Point> selectedSourcePointsForLayer(const Layer& sourceLayer, const Layer& derivedLayer) {
+    if (derivedLayer.pluginSourcePointIndices.empty()) return sourceLayer.points;
+
+    std::vector<Point> selected;
+    selected.reserve(derivedLayer.pluginSourcePointIndices.size());
+    for (const auto index : derivedLayer.pluginSourcePointIndices) {
+        if (index < sourceLayer.points.size()) selected.push_back(sourceLayer.points[index]);
+    }
+    return selected;
+}
+
 SampledLayerData sampleDiscreteLayer(const Layer& layer, double viewXMin, double viewXMax, double viewYMin, double viewYMax) {
     SampledLayerData sampled;
     const bool filterToView = !layer.style.connectPoints && (layer.style.showMarkers || !layer.errorValues.empty());
@@ -65,10 +76,14 @@ SampledLayerData sampleContinuousDerivedLayer(const Project& project, const Laye
     SampledLayerData sampled;
     const auto* source = resolveSourceLayer(project, layer);
     if (!source || source->points.empty()) return sampled;
+
+    const auto effectiveSourcePoints = selectedSourcePointsForLayer(*source, layer);
+    if (effectiveSourcePoints.empty()) return sampled;
+
     const int samples = std::clamp(std::max(128, samplesHint), 128, 8192);
 
     if (layer.generatorPluginId == "linear_fit") {
-        const auto model = math::fitLinearModel(source->points);
+        const auto model = math::fitLinearModel(effectiveSourcePoints);
         sampled.points = math::sampleLinearModel(model, viewXMin, viewXMax, samples);
         return sampled;
     }
@@ -80,14 +95,14 @@ SampledLayerData sampleContinuousDerivedLayer(const Project& project, const Laye
         else if (layer.generatorPluginId == "newton_deg5") degree = 5;
         else if (layer.generatorPluginId == "newton_polynomial") degree = getParamInt(layer.generatorParams, "degree", 2, 1);
         std::vector<double> coeffs;
-        if (math::fitPolynomialRegression(source->points, degree, coeffs)) {
+        if (math::fitPolynomialRegression(effectiveSourcePoints, degree, coeffs)) {
             sampled.points = math::samplePolynomial(coeffs, viewXMin, viewXMax, samples);
         }
         return sampled;
     }
 
     if (layer.generatorPluginId == "smooth_curve") {
-        sampled.points = math::sampleSpline(source->points, viewXMin, viewXMax, samples, true);
+        sampled.points = math::sampleSpline(effectiveSourcePoints, viewXMin, viewXMax, samples, true);
         return sampled;
     }
 

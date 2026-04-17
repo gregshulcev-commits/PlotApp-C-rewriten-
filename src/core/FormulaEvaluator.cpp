@@ -36,22 +36,22 @@ private:
     }
 
     double parseTerm() {
-        double value = parsePower();
+        double value = parseUnary();
         while (true) {
             skipSpaces();
-            if (match('*')) value *= parsePower();
-            else if (match('/')) value /= parsePower();
-            else if (startsImplicitMultiplication()) value *= parsePower();
+            if (match('*')) value *= parseUnary();
+            else if (match('/')) value /= parseUnary();
+            else if (startsImplicitMultiplication()) value *= parseUnary();
             else break;
         }
         return value;
     }
 
     double parsePower() {
-        double base = parseUnary();
+        double base = parsePrimary();
         skipSpaces();
         if (match('^')) {
-            const double exponent = parsePower();
+            const double exponent = parseUnary();
             return std::pow(base, exponent);
         }
         return base;
@@ -61,7 +61,7 @@ private:
         skipSpaces();
         if (match('+')) return parseUnary();
         if (match('-')) return -parseUnary();
-        return parsePrimary();
+        return parsePower();
     }
 
     double parsePrimary() {

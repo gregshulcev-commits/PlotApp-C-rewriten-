@@ -20,6 +20,7 @@ private:
                    const QString& sourceRowText = QString());
 
     plotapp::Layer layer_;
+    bool roleEditingEnabled_ {false};
     QTableWidget* table_ {nullptr};
 };
 

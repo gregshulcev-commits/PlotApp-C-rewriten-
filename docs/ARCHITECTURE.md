@@ -18,6 +18,7 @@ ProjectController
     +-- Importers
     +-- PluginManager
     +-- ProjectSerializer
+    +-- LayerSampler
     +-- SvgRenderer
 ```
 
@@ -28,17 +29,20 @@ ProjectController
 The core owns the persistent truth:
 - project settings
 - layers
-- visibility
-- styles
-- generated provenance
+- visibility and styling
+- formula metadata
+- derived-layer provenance
+- selected source-point indices for derived layers
 
-The core is intentionally UI-agnostic.
+The core remains UI-agnostic. The desktop selection UX is translated into model data rather than hidden in the widget layer.
 
 ### 2. Service layer
 
 `ProjectController` coordinates workflows:
 - importing a file into a new raw layer
+- creating/regenerating formula layers
 - applying a plugin to produce a derived layer
+- normalizing an optional source-point subset before plugin execution
 - saving/opening projects
 - recomputing derived layers on project load
 - exporting SVG
@@ -48,7 +52,7 @@ The core is intentionally UI-agnostic.
 Plugins are loaded at runtime by `PluginManager` through a C ABI.
 The ABI is defined in `include/plotapp/PluginApi.h`.
 
-This allows the approximation code to remain separate from the main application.
+Approximation logic remains separate from the main application binary. The core now preserves plugin separation while still allowing selection-aware execution by passing a *subset view* of the chosen source layer into the plugin.
 
 ### 4. UI layer
 
@@ -57,16 +61,34 @@ It adds:
 - a real plot window
 - dialogs for file import and plugin execution
 - layer visibility toggles
+- rectangular point selection for the currently selected layer
 - an integrated command console
 - a settings dialog that can surface managed-install version/update metadata
 
-## Why this design matches the request
+## Plugin targeting model
 
-The request explicitly asked for a modular structure where approximation logic behaves like a separate program or library that gets access to a layer and returns a result.
-That is exactly what the plugin ABI implements.
+Plugins are intentionally **single-layer** operations.
 
-The request also asked for a UI that can still preserve a simpler command-line mode.
-That is why the UI includes a command console backed by the same `CommandDispatcher` used by the CLI executable.
+```text
+Current layer tree selection
+ -> one source layer id
+ -> optional rectangular point subset from PlotCanvasWidget
+ -> ProjectController normalizes source indices
+ -> PluginManager receives one source-layer view containing only selected points
+ -> derived layer stores source layer id + selected source-point indices
+```
+
+This satisfies two important constraints:
+1. a plugin cannot be accidentally applied to multiple layers at once;
+2. reopening/recomputing a derived layer uses the same source subset instead of silently falling back to the entire original layer.
+
+## Role metadata scope
+
+`pointRoles` still exist in the model, but their meaning is now explicitly scoped to the `local_extrema` plugin.
+
+- raw layers do not expose a `Role` editor in the UI;
+- renderers only use role-based coloring when the layer supports extrema roles;
+- this keeps generic layers free from min/max-specific semantics.
 
 ## Project file strategy
 
@@ -76,11 +98,13 @@ The project file stores:
 - source layer id
 - plugin id
 - plugin params
+- selected source-point indices for derived layers
 - style and visibility
 
-This gives two benefits:
-1. the project can reopen even if a plugin is missing
-2. the app can optionally recompute derived layers later when the plugin is available again
+This provides three benefits:
+1. a project can reopen even if a plugin is missing;
+2. the app can optionally recompute derived layers later when the plugin is available again;
+3. recomputation remains faithful to the original selection instead of expanding to the full source layer.
 
 ## Import pipeline
 
@@ -93,22 +117,25 @@ File path
  -> raw layer creation
 ```
 
-## Plugin pipeline
+## Formula pipeline
 
 ```text
-Selected source layer
- -> runtime plugin lookup
- -> plugin request with source points + params
- -> generated result points
- -> new derived layer
+Expression + X range + sample count
+ -> validation
+ -> stored formula metadata
+ -> sampled points for persistence
+ -> viewport-aware re-sampling in the renderer
 ```
+
+The desktop formula dialog now seeds the default X range from the current viewport when data already exists, and adding a formula layer no longer forcibly resets the viewport for an existing project.
 
 ## Rendering split
 
 - `SvgRenderer` is the headless renderer used in tests and automation.
 - `PlotCanvasWidget` is the interactive window renderer used in the Qt UI.
+- `LayerSampler` provides viewport-aware sampling for formulas and continuous derived layers.
 
-This split keeps export and automated checks independent from GUI availability.
+This split keeps export and automated checks independent from GUI availability while allowing both renderers to respect stored provenance such as selected source subsets and error-bar bounds.
 
 ## Desktop update integration
 
@@ -118,3 +145,7 @@ Instead it:
 - shows build version plus installed version / install time / installed commit / repo / branch;
 - invokes the stable managed-install shell workflow with `QProcess`;
 - keeps the shell desktop manager as the single source of truth for GitHub/Git updates.
+
+## Trusted plugin boundary
+
+Plugin discovery still loads shared libraries from configured plugin directories. That remains a trusted-code boundary. This revision improved provenance and selection handling, but it did **not** redesign plugin sandboxing or isolation.

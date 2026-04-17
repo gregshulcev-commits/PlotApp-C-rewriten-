@@ -28,7 +28,7 @@
 namespace plotapp {
 namespace {
 
-constexpr int kCurrentProjectFormatVersion = 5;
+constexpr int kCurrentProjectFormatVersion = 6;
 constexpr char kJoinedFieldSeparator = '\x1F';
 constexpr std::uintmax_t kMaxProjectFileBytes = 64ull * 1024ull * 1024ull;
 constexpr std::size_t kMaxProjectLineBytes = 1u * 1024u * 1024u;
@@ -279,7 +279,8 @@ void validateProjectForSave(const Project& project) {
         if (layer.errorValues.size() > kMaxPointsPerLayer ||
             layer.pointRoles.size() > kMaxPointsPerLayer ||
             layer.pointVisibility.size() > kMaxPointsPerLayer ||
-            layer.importedRowIndices.size() > kMaxPointsPerLayer) {
+            layer.importedRowIndices.size() > kMaxPointsPerLayer ||
+            layer.pluginSourcePointIndices.size() > kMaxPointsPerLayer) {
             throw std::runtime_error("Layer metadata exceeds safe point limits: " + layer.name);
         }
         if (layer.importedHeaders.size() > kMaxImportedColumns) {
@@ -331,6 +332,9 @@ std::string renderProject(const Project& project) {
         writeKV(out, "PARENT_LAYER", layer.parentLayerId);
         writeKV(out, "PLUGIN_ID", layer.generatorPluginId);
         writeKV(out, "PLUGIN_PARAMS", layer.generatorParams);
+        for (const auto index : layer.pluginSourcePointIndices) {
+            out << "PLUGIN_SOURCE_INDEX=" << index << '\n';
+        }
         writeKV(out, "NOTES", layer.notes);
         writeKV(out, "FORMULA", layer.formulaExpression);
         writeKV(out, "FORMULA_XMIN", std::to_string(layer.formulaXMin));
@@ -362,6 +366,9 @@ std::string renderProject(const Project& project) {
 }
 
 void normalizePointMetadata(Layer& layer) {
+    std::sort(layer.pluginSourcePointIndices.begin(), layer.pluginSourcePointIndices.end());
+    layer.pluginSourcePointIndices.erase(std::unique(layer.pluginSourcePointIndices.begin(), layer.pluginSourcePointIndices.end()),
+                                         layer.pluginSourcePointIndices.end());
     if (layer.pointRoles.size() > layer.points.size()) layer.pointRoles.resize(layer.points.size());
     if (layer.pointRoles.size() < layer.points.size()) {
         layer.pointRoles.resize(layer.points.size(), static_cast<int>(PointRole::Normal));
@@ -528,6 +535,10 @@ Project ProjectSerializer::load(const std::string& path) {
         else if (key == "PARENT_LAYER") current.parentLayerId = value;
         else if (key == "PLUGIN_ID") current.generatorPluginId = value;
         else if (key == "PLUGIN_PARAMS") current.generatorParams = value;
+        else if (key == "PLUGIN_SOURCE_INDEX") {
+            enforceEntryLimit(current.pluginSourcePointIndices.size(), kMaxPointsPerLayer, "plugin source index", lineNumber);
+            current.pluginSourcePointIndices.push_back(static_cast<std::size_t>(std::max(0, parseIntField(key, value, lineNumber))));
+        }
         else if (key == "NOTES") current.notes = value;
         else if (key == "FORMULA") current.formulaExpression = value;
         else if (key == "FORMULA_XMIN") current.formulaXMin = parseDoubleField(key, value, lineNumber);

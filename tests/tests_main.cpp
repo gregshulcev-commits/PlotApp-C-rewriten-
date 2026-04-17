@@ -198,6 +198,12 @@ void test_formula_evaluator_and_layer() {
     require(std::abs(FormulaEvaluator::evaluate("1e-3*x", 1000.0) - 1.0) < 1e-9, "Scientific notation parsing failed");
     require(std::abs(FormulaEvaluator::evaluate("2sin(x)", 3.14159265358979323846 / 2.0) - 2.0) < 1e-9,
             "Implicit multiplication parsing failed");
+    require(std::abs(FormulaEvaluator::evaluate("-x^2", 3.0) + 9.0) < 1e-9,
+            "Unary minus must have lower precedence than exponentiation");
+    require(std::abs(FormulaEvaluator::evaluate("(-x)^2", 3.0) - 9.0) < 1e-9,
+            "Explicit parentheses around unary minus should be preserved");
+    require(std::abs(FormulaEvaluator::evaluate("2^-3", 0.0) - 0.125) < 1e-12,
+            "Negative exponents should be parsed correctly");
 
     ProjectController controller;
     auto& layer = controller.createFormulaLayer("quad", "x^2", -2.0, 2.0, 21);
@@ -318,6 +324,7 @@ void test_project_roundtrip() {
     derived.sourceLayerId = rawId;
     derived.generatorPluginId = "linear_fit";
     derived.generatorParams = "samples=16";
+    derived.pluginSourcePointIndices = {0, 2};
     project.layers().push_back(derived);
 
     const auto path = buildDir() / "tests_roundtrip.plotapp";
@@ -332,6 +339,9 @@ void test_project_roundtrip() {
     require(loaded.layers()[0].importedHeaders.size() == 3, "Roundtrip imported headers mismatch");
     require(loaded.layers()[0].importedRowIndices.size() == 3, "Roundtrip imported row indices mismatch");
     require(loaded.layers()[1].type == LayerType::FormulaSeries, "Roundtrip formula type mismatch");
+    require(loaded.layers()[2].pluginSourcePointIndices.size() == 2, "Roundtrip selected source point metadata mismatch");
+    require(loaded.layers()[2].pluginSourcePointIndices[0] == 0 && loaded.layers()[2].pluginSourcePointIndices[1] == 2,
+            "Roundtrip selected source point order mismatch");
 }
 
 
@@ -531,6 +541,46 @@ void test_plugins_and_recompute() {
     require(!reopenedExtrema->pointVisibility.empty() && reopenedExtrema->pointVisibility[0] == 0, "User hidden extrema point should survive recompute");
 }
 
+void test_selected_point_plugins_and_recompute() {
+    ProjectController controller;
+    controller.pluginManager().addSearchDirectory(pluginDir().string());
+    controller.pluginManager().discover();
+
+    auto& raw = controller.createManualLayer("subset_raw");
+    raw.points = {{0.0, 0.0}, {1.0, 1.0}, {2.0, 2.0}, {10.0, 100.0}};
+    const auto rawId = raw.id;
+
+    auto& fit = controller.applyPlugin("linear_fit", rawId, "samples=5", {0, 1, 2});
+    const auto fitId = fit.id;
+    require(fit.pluginSourcePointIndices.size() == 3, "Derived layer must persist selected source point indices");
+    require(fit.points.size() == 5, "Subset-derived layer sample count mismatch");
+    require(std::abs(fit.points.front().x - 0.0) < 1e-9, "Subset plugin should start from selected source x min");
+    require(std::abs(fit.points.back().x - 2.0) < 1e-9, "Subset plugin should end at selected source x max");
+
+    const auto sampledSubset = sampleLayerForViewport(controller.project(), fit, 0.0, 2.0, -10.0, 20.0, 256);
+    require(!sampledSubset.points.empty(), "Subset-derived viewport sampling should produce points");
+    require(std::abs(sampledSubset.points.front().y - 0.0) < 1e-6, "Subset-derived viewport sampling should use only selected points");
+    require(std::abs(sampledSubset.points.back().y - 2.0) < 1e-6, "Subset-derived viewport sampling should ignore out-of-selection outliers");
+
+    const auto savedPath = buildDir() / "plugin_subset_project.plotapp";
+    controller.saveProject(savedPath.string());
+    controller.openProject(savedPath.string());
+    auto warnings = controller.recomputeDerivedLayers();
+    require(warnings.empty(), "Subset-derived recompute should not emit warnings");
+
+    auto* reopenedFit = controller.project().findLayer(fitId);
+    require(reopenedFit != nullptr, "Reopened subset-derived layer missing");
+    require(reopenedFit->pluginSourcePointIndices.size() == 3, "Reopened subset-derived layer must keep selected source points");
+    require(reopenedFit->pluginSourcePointIndices[0] == 0 && reopenedFit->pluginSourcePointIndices[1] == 1
+            && reopenedFit->pluginSourcePointIndices[2] == 2,
+            "Reopened subset-derived layer should keep the exact selected source points");
+
+    const auto sampledReopened = sampleLayerForViewport(controller.project(), *reopenedFit, 0.0, 2.0, -10.0, 20.0, 256);
+    require(!sampledReopened.points.empty(), "Reopened subset-derived viewport sampling should produce points");
+    require(std::abs(sampledReopened.points.back().y - 2.0) < 1e-6,
+            "Reopened subset-derived viewport sampling should still use only selected points");
+}
+
 void test_svg_export_security_and_formula_render() {
     Project project;
     project.settings().title = "<Unsafe & Title>";
@@ -603,6 +653,7 @@ int main() {
         test_invalid_project_rejected();
         test_project_numeric_sanitization_and_rejection();
         test_plugins_and_recompute();
+        test_selected_point_plugins_and_recompute();
         test_svg_export_security_and_formula_render();
         test_command_dispatcher();
         std::cout << "All tests passed.\n";

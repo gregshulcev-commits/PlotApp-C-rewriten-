@@ -45,6 +45,7 @@ struct Layer {
     std::string parentLayerId;
     std::string generatorPluginId;
     std::string generatorParams;
+    std::vector<std::size_t> pluginSourcePointIndices;
     std::string notes;
 
     std::string formulaExpression;
@@ -111,7 +112,12 @@ inline bool pointIsVisible(const Layer& layer, std::size_t index) {
     return index >= layer.pointVisibility.size() || layer.pointVisibility[index] != 0;
 }
 
+inline bool layerSupportsPointRoles(const Layer& layer) {
+    return layer.generatorPluginId == "local_extrema";
+}
+
 inline PointRole pointRoleAt(const Layer& layer, std::size_t index) {
+    if (!layerSupportsPointRoles(layer)) return PointRole::Normal;
     if (index >= layer.pointRoles.size()) return PointRole::Normal;
     const int raw = layer.pointRoles[index];
     if (raw == static_cast<int>(PointRole::Minimum)) return PointRole::Minimum;

@@ -18,6 +18,7 @@ public:
     double xMin() const;
     double xMax() const;
     int samples() const;
+    void setSuggestedRange(double xMin, double xMax);
 
 private slots:
     void validateAndAccept();

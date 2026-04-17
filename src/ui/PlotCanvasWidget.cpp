@@ -176,6 +176,30 @@ void PlotCanvasWidget::setProject(plotapp::Project* project) {
     } else {
         resetViewToProject();
     }
+
+    if (project_ == nullptr) {
+        selectedLayerId_.clear();
+        selectedPointIndices_.clear();
+    } else if (const auto* layer = selectedLayer()) {
+        std::vector<std::size_t> normalized;
+        normalized.reserve(selectedPointIndices_.size());
+        std::vector<int> used(layer->points.size(), 0);
+        for (const auto index : selectedPointIndices_) {
+            if (index < layer->points.size() && used[index] == 0) {
+                normalized.push_back(index);
+                used[index] = 1;
+            }
+        }
+        selectedPointIndices_ = normalized;
+        if (selectedPointIndices_.empty() && !layer->points.empty()) {
+            selectedPointIndices_ = fullSelectionForLayer(*layer);
+        }
+    } else {
+        selectedLayerId_.clear();
+        selectedPointIndices_.clear();
+    }
+
+    emitPointSelectionChanged();
     update();
 }
 
@@ -185,6 +209,77 @@ bool PlotCanvasWidget::exportPng(const QString& path) const {
     QPainter painter(&image);
     const_cast<PlotCanvasWidget*>(this)->render(&painter);
     return image.save(path, "PNG");
+}
+
+void PlotCanvasWidget::setSelectedLayerId(const std::string& layerId) {
+    if (layerId.empty()) {
+        selectedLayerId_.clear();
+        selectedPointIndices_.clear();
+        emitPointSelectionChanged();
+        update();
+        return;
+    }
+
+    selectedLayerId_ = layerId;
+    selectEntireCurrentLayer();
+}
+
+bool PlotCanvasWidget::selectionCoversWholeLayer() const {
+    const auto* layer = selectedLayer();
+    return layer != nullptr && !layer->points.empty() && selectedPointIndices_.size() == layer->points.size();
+}
+
+void PlotCanvasWidget::selectEntireCurrentLayer() {
+    const auto* layer = selectedLayer();
+    if (!layer) {
+        selectedLayerId_.clear();
+        selectedPointIndices_.clear();
+    } else {
+        selectedPointIndices_ = fullSelectionForLayer(*layer);
+    }
+    emitPointSelectionChanged();
+    update();
+}
+
+const plotapp::Layer* PlotCanvasWidget::selectedLayer() const {
+    if (project_ == nullptr || selectedLayerId_.empty()) return nullptr;
+    return project_->findLayer(selectedLayerId_);
+}
+
+std::vector<std::size_t> PlotCanvasWidget::fullSelectionForLayer(const plotapp::Layer& layer) const {
+    std::vector<std::size_t> indices;
+    indices.reserve(layer.points.size());
+    for (std::size_t i = 0; i < layer.points.size(); ++i) indices.push_back(i);
+    return indices;
+}
+
+void PlotCanvasWidget::emitPointSelectionChanged() {
+    const auto* layer = selectedLayer();
+    if (!layer) {
+        emit pointSelectionChanged({}, 0, 0, false);
+        return;
+    }
+    emit pointSelectionChanged(QString::fromStdString(layer->id), static_cast<int>(selectedPointIndices_.size()),
+                               static_cast<int>(layer->points.size()), selectionCoversWholeLayer());
+}
+
+void PlotCanvasWidget::applySelectionRect(const QRectF& pixelRect) {
+    const auto* layer = selectedLayer();
+    if (layer == nullptr) return;
+    if (pixelRect.width() < 3.0 || pixelRect.height() < 3.0) return;
+
+    std::vector<std::size_t> selected;
+    selected.reserve(layer->points.size());
+    for (std::size_t i = 0; i < layer->points.size(); ++i) {
+        if (!plotapp::pointIsVisible(*layer, i)) continue;
+        const auto& point = layer->points[i];
+        if (!std::isfinite(point.x) || !std::isfinite(point.y)) continue;
+        const QPointF mapped = mapPoint(point);
+        if (pixelRect.contains(mapped)) selected.push_back(i);
+    }
+    selectedPointIndices_ = std::move(selected);
+    emitPointSelectionChanged();
+    update();
 }
 
 QRectF PlotCanvasWidget::plotRect() const {
@@ -230,15 +325,19 @@ PlotCanvasWidget::Bounds PlotCanvasWidget::dataBounds() const {
             if (!plotapp::pointIsVisible(layer, i)) continue;
             const auto& point = layer.points[i];
             if (!std::isfinite(point.x) || !std::isfinite(point.y)) continue;
+            const double halfError = i < layer.errorValues.size() ? std::max(0.0, layer.errorValues[i]) * 0.5 : 0.0;
+            const double minY = point.y - halfError;
+            const double maxY = point.y + halfError;
             if (first) {
                 bounds.minX = bounds.maxX = point.x;
-                bounds.minY = bounds.maxY = point.y;
+                bounds.minY = minY;
+                bounds.maxY = maxY;
                 first = false;
             } else {
                 bounds.minX = std::min(bounds.minX, point.x);
                 bounds.maxX = std::max(bounds.maxX, point.x);
-                bounds.minY = std::min(bounds.minY, point.y);
-                bounds.maxY = std::max(bounds.maxY, point.y);
+                bounds.minY = std::min(bounds.minY, minY);
+                bounds.maxY = std::max(bounds.maxY, maxY);
             }
         }
     }
@@ -315,6 +414,7 @@ void PlotCanvasWidget::paintEvent(QPaintEvent*) {
     const QColor fg = dark ? QColor("#e8eaed") : QColor("#111111");
     const QColor grid = dark ? QColor("#3c4043") : QColor("#d9d9d9");
     const QColor plotBg = dark ? QColor("#111315") : QColor("#ffffff");
+    const QColor selectionColor = palette().highlight().color().isValid() ? palette().highlight().color() : QColor("#4285f4");
     painter.fillRect(rect(), bg);
 
     const QRectF pr = plotRect();
@@ -366,12 +466,12 @@ void PlotCanvasWidget::paintEvent(QPaintEvent*) {
     double lastRight = xtr.left() - 1000.0;
     for (double x = std::floor(viewXMin_ / xStep) * xStep; x <= viewXMax_ + xStep * 0.5; x += xStep) {
         const QPointF p = mapPoint(Point{x, viewYMin_});
-        const QString text = numberLabel(x, xStep);
-        const double width = metrics.horizontalAdvance(text);
+        const QString textValue = numberLabel(x, xStep);
+        const double width = metrics.horizontalAdvance(textValue);
         QRectF labelRect(p.x() - width / 2.0 - 2.0, xtr.top(), width + 4.0, xtr.height());
         labelRect = labelRect.intersected(xtr);
         if (labelRect.left() <= lastRight + 4.0) continue;
-        painter.drawText(labelRect, Qt::AlignHCenter | Qt::AlignTop, text);
+        painter.drawText(labelRect, Qt::AlignHCenter | Qt::AlignTop, textValue);
         lastRight = labelRect.right();
     }
     painter.restore();
@@ -381,10 +481,10 @@ void PlotCanvasWidget::paintEvent(QPaintEvent*) {
     double lastBottom = ytr.bottom() + 1000.0;
     for (double y = std::floor(viewYMin_ / yStep) * yStep; y <= viewYMax_ + yStep * 0.5; y += yStep) {
         const QPointF p = mapPoint(Point{viewXMin_, y});
-        const QString text = numberLabel(y, yStep);
+        const QString textValue = numberLabel(y, yStep);
         QRectF labelRect(ytr.left(), p.y() - metrics.height() / 2.0, ytr.width() - 6.0, metrics.height() + 2.0);
         if (labelRect.bottom() >= lastBottom - 2.0) continue;
-        painter.drawText(labelRect, Qt::AlignRight | Qt::AlignVCenter, text);
+        painter.drawText(labelRect, Qt::AlignRight | Qt::AlignVCenter, textValue);
         lastBottom = labelRect.top();
     }
     painter.restore();
@@ -397,6 +497,7 @@ void PlotCanvasWidget::paintEvent(QPaintEvent*) {
     drawRichText(painter, QRectF(-yr.height() / 2.0, -yr.width() / 2.0, yr.height(), yr.width()), latexLikeToHtml(project_->settings().yLabel), Qt::AlignCenter, fg);
     painter.restore();
 
+    const bool wholeSelection = selectionCoversWholeLayer();
     painter.save();
     painter.setClipRect(pr.adjusted(1, 1, -1, -1));
     for (const auto& layer : project_->layers()) {
@@ -456,8 +557,65 @@ void PlotCanvasWidget::paintEvent(QPaintEvent*) {
                 painter.drawEllipse(mapped, 3.5, 3.5);
             }
         }
+
+        const bool isSelectedLayer = !selectedLayerId_.empty() && layer.id == selectedLayerId_;
+        if (!isSelectedLayer || selectedPointIndices_.empty()) continue;
+
+        if (wholeSelection && layer.style.connectPoints) {
+            painter.setPen(QPen(selectionColor, std::max(3, layer.style.lineWidth + 2), Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+            painter.setBrush(Qt::NoBrush);
+            QPainterPath selectedPath;
+            bool first = true;
+            plotapp::Point previous {};
+            bool havePrevious = false;
+            const double xRange = viewXMax_ - viewXMin_;
+            const double yRange = viewYMax_ - viewYMin_;
+            for (const auto& point : sampled.points) {
+                if (!std::isfinite(point.x) || !std::isfinite(point.y)) {
+                    first = true;
+                    havePrevious = false;
+                    continue;
+                }
+                const QPointF mapped = mapPoint(point);
+                if (first || (havePrevious && shouldBreakSegment(previous, point, xRange, yRange))) {
+                    selectedPath.moveTo(mapped);
+                    first = false;
+                } else {
+                    selectedPath.lineTo(mapped);
+                }
+                previous = point;
+                havePrevious = true;
+            }
+            painter.drawPath(selectedPath);
+        }
+
+        const bool drawPointSelection = !wholeSelection || !layer.style.connectPoints
+            || (layer.type != LayerType::FormulaSeries && selectedPointIndices_.size() <= 2000);
+        if (!drawPointSelection) continue;
+
+        painter.setPen(QPen(selectionColor, 1.8));
+        painter.setBrush(Qt::NoBrush);
+        const double haloRadius = layer.style.showMarkers ? 6.5 : 5.5;
+        for (const auto sourceIndex : selectedPointIndices_) {
+            if (sourceIndex >= layer.points.size()) continue;
+            if (!plotapp::pointIsVisible(layer, sourceIndex)) continue;
+            const auto& point = layer.points[sourceIndex];
+            if (!std::isfinite(point.x) || !std::isfinite(point.y)) continue;
+            const QPointF mapped = mapPoint(point);
+            if (!pr.adjusted(-haloRadius, -haloRadius, haloRadius, haloRadius).contains(mapped)) continue;
+            painter.drawEllipse(mapped, haloRadius, haloRadius);
+        }
     }
     painter.restore();
+
+    if (selectingPoints_) {
+        painter.save();
+        const QRectF selectionRect = QRectF(selectionStartPos_, selectionCurrentPos_).normalized().intersected(pr);
+        painter.setBrush(QColor(selectionColor.red(), selectionColor.green(), selectionColor.blue(), 40));
+        painter.setPen(QPen(selectionColor, 1.0, Qt::DashLine));
+        painter.drawRect(selectionRect);
+        painter.restore();
+    }
 
     painter.setPen(fg);
     for (const auto& layer : project_->layers()) {
@@ -469,7 +627,7 @@ void PlotCanvasWidget::paintEvent(QPaintEvent*) {
         painter.drawRoundedRect(box, 6, 6);
         const QColor primaryColor = safeColor(layer.style.color);
         const QColor secondaryColor = safeColor(layer.style.secondaryColor, primaryColor);
-        if (!layer.pointRoles.empty() && secondaryColor != primaryColor) {
+        if (layerSupportsPointRoles(layer) && !layer.pointRoles.empty() && secondaryColor != primaryColor) {
             painter.fillRect(box.adjusted(8, 9, -box.width() + 16, -9), primaryColor);
             painter.fillRect(box.adjusted(18, 9, -box.width() + 26, -9), secondaryColor);
         } else {
@@ -491,6 +649,18 @@ void PlotCanvasWidget::mousePressEvent(QMouseEvent* event) {
     pressMousePos_ = event->pos();
     lastMousePos_ = event->pos();
     if (event->button() != Qt::LeftButton || !project_) return;
+
+    if ((event->modifiers() & Qt::ShiftModifier) && plotRect().contains(event->pos()) && selectedLayer() != nullptr) {
+        selectingPoints_ = true;
+        selectionStartPos_ = event->pos();
+        selectionCurrentPos_ = event->pos();
+        draggingView_ = false;
+        draggingLegend_ = false;
+        draggedLegendLayerId_.clear();
+        update();
+        return;
+    }
+
     for (const auto& [layerId, rect] : legendRects_) {
         if (rect.contains(event->pos())) {
             draggingLegend_ = true;
@@ -503,6 +673,11 @@ void PlotCanvasWidget::mousePressEvent(QMouseEvent* event) {
 }
 
 void PlotCanvasWidget::mouseMoveEvent(QMouseEvent* event) {
+    if (selectingPoints_) {
+        selectionCurrentPos_ = event->pos();
+        update();
+        return;
+    }
     if (draggingLegend_ && project_) {
         auto* layer = project_->findLayer(draggedLegendLayerId_);
         if (!layer) return;
@@ -529,6 +704,14 @@ void PlotCanvasWidget::mouseMoveEvent(QMouseEvent* event) {
 }
 
 void PlotCanvasWidget::mouseReleaseEvent(QMouseEvent* event) {
+    if (selectingPoints_) {
+        selectionCurrentPos_ = event->pos();
+        const QRectF selectionRect = QRectF(selectionStartPos_, selectionCurrentPos_).normalized().intersected(plotRect());
+        selectingPoints_ = false;
+        applySelectionRect(selectionRect);
+        return;
+    }
+
     const bool clicked = (event->pos() - pressMousePos_).manhattanLength() < 4;
     const bool wasDraggingView = draggingView_;
     const bool wasDraggingLegend = draggingLegend_;

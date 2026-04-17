@@ -52,6 +52,17 @@ double FormulaLayerDialog::xMin() const { return xMinSpin_->value(); }
 double FormulaLayerDialog::xMax() const { return xMaxSpin_->value(); }
 int FormulaLayerDialog::samples() const { return samplesSpin_->value(); }
 
+void FormulaLayerDialog::setSuggestedRange(double xMin, double xMax) {
+    if (!std::isfinite(xMin) || !std::isfinite(xMax)) return;
+    if (xMin > xMax) std::swap(xMin, xMax);
+    if (xMin == xMax) {
+        xMin -= 1.0;
+        xMax += 1.0;
+    }
+    xMinSpin_->setValue(xMin);
+    xMaxSpin_->setValue(xMax);
+}
+
 void FormulaLayerDialog::validateAndAccept() {
     try {
         double minValue = xMin();

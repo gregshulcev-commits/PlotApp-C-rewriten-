@@ -77,6 +77,59 @@ bool nearlyEqual(double a, double b) {
     return std::fabs(a - b) <= scale * 1e-9;
 }
 
+std::vector<std::size_t> normalizeSourcePointSelection(const Layer& sourceLayer, const std::vector<std::size_t>& requested) {
+    std::vector<std::size_t> normalized;
+    if (sourceLayer.points.empty()) return normalized;
+
+    if (requested.empty()) {
+        normalized.reserve(sourceLayer.points.size());
+        for (std::size_t i = 0; i < sourceLayer.points.size(); ++i) normalized.push_back(i);
+        return normalized;
+    }
+
+    std::vector<int> selected(sourceLayer.points.size(), 0);
+    for (const auto index : requested) {
+        if (index < sourceLayer.points.size()) selected[index] = 1;
+    }
+
+    normalized.reserve(sourceLayer.points.size());
+    for (std::size_t i = 0; i < sourceLayer.points.size(); ++i) {
+        if (selected[i] != 0) normalized.push_back(i);
+    }
+    return normalized;
+}
+
+bool selectionCoversWholeLayer(const Layer& sourceLayer, const std::vector<std::size_t>& normalizedSelection) {
+    return !sourceLayer.points.empty() && normalizedSelection.size() == sourceLayer.points.size();
+}
+
+Layer buildSelectedSourceLayer(const Layer& sourceLayer, const std::vector<std::size_t>& normalizedSelection) {
+    if (selectionCoversWholeLayer(sourceLayer, normalizedSelection)) return sourceLayer;
+
+    Layer selected = sourceLayer;
+    selected.points.clear();
+    selected.errorValues.clear();
+    selected.pointRoles.clear();
+    selected.pointVisibility.clear();
+    selected.importedRowIndices.clear();
+
+    selected.points.reserve(normalizedSelection.size());
+    if (!sourceLayer.errorValues.empty()) selected.errorValues.reserve(normalizedSelection.size());
+    if (!sourceLayer.pointRoles.empty()) selected.pointRoles.reserve(normalizedSelection.size());
+    if (!sourceLayer.pointVisibility.empty()) selected.pointVisibility.reserve(normalizedSelection.size());
+    if (!sourceLayer.importedRowIndices.empty()) selected.importedRowIndices.reserve(normalizedSelection.size());
+
+    for (const auto index : normalizedSelection) {
+        if (index >= sourceLayer.points.size()) continue;
+        selected.points.push_back(sourceLayer.points[index]);
+        if (index < sourceLayer.errorValues.size()) selected.errorValues.push_back(sourceLayer.errorValues[index]);
+        if (index < sourceLayer.pointRoles.size()) selected.pointRoles.push_back(sourceLayer.pointRoles[index]);
+        if (index < sourceLayer.pointVisibility.size()) selected.pointVisibility.push_back(sourceLayer.pointVisibility[index]);
+        if (index < sourceLayer.importedRowIndices.size()) selected.importedRowIndices.push_back(sourceLayer.importedRowIndices[index]);
+    }
+    return selected;
+}
+
 std::vector<int> mergePointVisibility(const Layer& existingLayer, const Layer& recomputedLayer) {
     std::vector<int> merged(recomputedLayer.points.size(), 1);
     if (existingLayer.pointVisibility.empty() || existingLayer.points.empty() || recomputedLayer.points.empty()) {
@@ -212,12 +265,22 @@ void ProjectController::addPoint(const std::string& layerId, Point point) {
     }
 }
 
-Layer& ProjectController::applyPlugin(const std::string& pluginId, const std::string& sourceLayerId, const std::string& params) {
+Layer& ProjectController::applyPlugin(const std::string& pluginId, const std::string& sourceLayerId, const std::string& params,
+                                    const std::vector<std::size_t>& sourcePointSelection) {
     auto* source = project_.findLayer(sourceLayerId);
     if (!source) throw std::runtime_error("Source layer not found: " + sourceLayerId);
-    auto result = pluginManager_.run(pluginId, *source, params);
+
+    const auto normalizedSelection = normalizeSourcePointSelection(*source, sourcePointSelection);
+    if (normalizedSelection.empty()) {
+        throw std::runtime_error("No source points selected for plugin application");
+    }
+
+    auto result = pluginManager_.run(pluginId, buildSelectedSourceLayer(*source, normalizedSelection), params);
     if (result.layer.legendText.empty()) result.layer.legendText = result.layer.name;
     result.layer.parentLayerId = source->id;
+    result.layer.pluginSourcePointIndices = selectionCoversWholeLayer(*source, normalizedSelection)
+        ? std::vector<std::size_t>{}
+        : normalizedSelection;
     project_.layers().push_back(std::move(result.layer));
     return project_.layers().back();
 }
@@ -244,8 +307,17 @@ std::vector<std::string> ProjectController::recomputeDerivedLayers() {
             continue;
         }
         try {
-            auto result = pluginManager_.run(layer.generatorPluginId, *source, layer.generatorParams);
+            const auto normalizedSelection = normalizeSourcePointSelection(*source, layer.pluginSourcePointIndices);
+            if (!layer.pluginSourcePointIndices.empty() && normalizedSelection.empty()) {
+                warnings.push_back("Stored point selection is no longer valid for layer: " + layer.name);
+                continue;
+            }
+
+            auto result = pluginManager_.run(layer.generatorPluginId, buildSelectedSourceLayer(*source, normalizedSelection), layer.generatorParams);
             const Layer previousLayer = layer;
+            layer.pluginSourcePointIndices = selectionCoversWholeLayer(*source, normalizedSelection)
+                ? std::vector<std::size_t>{}
+                : normalizedSelection;
             layer.points = std::move(result.layer.points);
             layer.errorValues = std::move(result.layer.errorValues);
             layer.pointRoles = std::move(result.layer.pointRoles);

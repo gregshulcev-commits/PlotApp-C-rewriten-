@@ -26,7 +26,8 @@ public:
     Layer& createFormulaLayer(const std::string& name, const std::string& expression, double xMin, double xMax, int samples);
     void regenerateFormulaLayer(Layer& layer);
     void addPoint(const std::string& layerId, Point point);
-    Layer& applyPlugin(const std::string& pluginId, const std::string& sourceLayerId, const std::string& params);
+    Layer& applyPlugin(const std::string& pluginId, const std::string& sourceLayerId, const std::string& params,
+                       const std::vector<std::size_t>& sourcePointSelection = {});
     std::vector<std::string> recomputeDerivedLayers();
 
     void saveProject(const std::string& path) const;

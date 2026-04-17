@@ -5,10 +5,12 @@
 #include <QPoint>
 #include <QPointF>
 #include <QRectF>
+#include <QString>
 #include <QWidget>
 
 #include <map>
 #include <string>
+#include <vector>
 
 namespace plotapp::ui {
 
@@ -21,10 +23,22 @@ public:
     bool exportPng(const QString& path) const;
     void resetViewToProject();
 
+    double viewXMin() const { return viewXMin_; }
+    double viewXMax() const { return viewXMax_; }
+    double viewYMin() const { return viewYMin_; }
+    double viewYMax() const { return viewYMax_; }
+
+    void setSelectedLayerId(const std::string& layerId);
+    std::string selectedLayerId() const { return selectedLayerId_; }
+    const std::vector<std::size_t>& selectedPointIndices() const { return selectedPointIndices_; }
+    bool selectionCoversWholeLayer() const;
+    void selectEntireCurrentLayer();
+
 signals:
     void titleClicked();
     void xLabelClicked();
     void yLabelClicked();
+    void pointSelectionChanged(const QString& layerId, int selectedCount, int totalCount, bool wholeLayer);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -54,6 +68,10 @@ private:
     plotapp::Point unmapPoint(const QPointF& pixel) const;
     void zoomAt(const QPointF& pixel, double factorX, double factorY);
     QRectF legendRectForLayer(const plotapp::Layer& layer) const;
+    const plotapp::Layer* selectedLayer() const;
+    std::vector<std::size_t> fullSelectionForLayer(const plotapp::Layer& layer) const;
+    void emitPointSelectionChanged();
+    void applySelectionRect(const QRectF& pixelRect);
 
     plotapp::Project* project_ {nullptr};
     mutable std::map<std::string, QRectF> legendRects_;
@@ -63,10 +81,15 @@ private:
     double viewYMax_ {10.0};
     bool draggingView_ {false};
     bool draggingLegend_ {false};
+    bool selectingPoints_ {false};
     QPoint pressMousePos_;
     QPoint lastMousePos_;
+    QPoint selectionStartPos_;
+    QPoint selectionCurrentPos_;
     std::string draggedLegendLayerId_;
     QPointF legendDragOffset_;
+    std::string selectedLayerId_;
+    std::vector<std::size_t> selectedPointIndices_;
 };
 
 } // namespace plotapp::ui

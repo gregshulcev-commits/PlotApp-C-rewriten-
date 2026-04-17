@@ -60,7 +60,7 @@ QTableWidgetItem* makeReadOnlyItem(const QString& text) {
 } // namespace
 
 PointsEditorDialog::PointsEditorDialog(plotapp::Layer layer, QWidget* parent)
-    : QDialog(parent), layer_(std::move(layer)) {
+    : QDialog(parent), layer_(std::move(layer)), roleEditingEnabled_(plotapp::layerSupportsPointRoles(layer_)) {
     setWindowTitle("Edit points");
     auto* layout = new QVBoxLayout(this);
     table_ = new QTableWidget(this);
@@ -77,6 +77,8 @@ PointsEditorDialog::PointsEditorDialog(plotapp::Layer layer, QWidget* parent)
         }
         insertRow(table_->rowCount(), &layer_.points[row], visible, role, sourceRowText);
     }
+
+    table_->setColumnHidden(kColumnRole, !roleEditingEnabled_);
 
     table_->horizontalHeader()->setSectionResizeMode(kColumnX, QHeaderView::Stretch);
     table_->horizontalHeader()->setSectionResizeMode(kColumnY, QHeaderView::Stretch);
@@ -110,7 +112,8 @@ void PointsEditorDialog::insertRow(int row, const plotapp::Point* point, bool vi
     table_->setItem(row, kColumnX, new QTableWidgetItem(point ? QString::number(point->x) : QString()));
     table_->setItem(row, kColumnY, new QTableWidgetItem(point ? QString::number(point->y) : QString()));
     table_->setItem(row, kColumnVisible, makeCheckItem(visible));
-    table_->setCellWidget(row, kColumnRole, makeRoleCombo(table_, role));
+    if (roleEditingEnabled_) table_->setCellWidget(row, kColumnRole, makeRoleCombo(table_, role));
+    else table_->setItem(row, kColumnRole, makeReadOnlyItem({}));
     table_->setItem(row, kColumnSourceRow, makeReadOnlyItem(sourceRowText));
 }
 
@@ -130,7 +133,7 @@ plotapp::Layer PointsEditorDialog::result() const {
         auto* visibleItem = table_->item(row, kColumnVisible);
         auto* sourceRowItem = table_->item(row, kColumnSourceRow);
         auto* roleCombo = qobject_cast<QComboBox*>(table_->cellWidget(row, kColumnRole));
-        if (!xItem || !yItem || !visibleItem || !roleCombo) continue;
+        if (!xItem || !yItem || !visibleItem) continue;
 
         bool okX = false;
         bool okY = false;
@@ -140,7 +143,10 @@ plotapp::Layer PointsEditorDialog::result() const {
 
         copy.points.push_back(plotapp::Point{x, y});
         copy.pointVisibility.push_back(visibleItem->checkState() == Qt::Checked ? 1 : 0);
-        copy.pointRoles.push_back(static_cast<int>(roleFromText(roleCombo->currentText())));
+        if (roleEditingEnabled_) {
+            const auto role = roleCombo != nullptr ? roleFromText(roleCombo->currentText()) : plotapp::PointRole::Normal;
+            copy.pointRoles.push_back(static_cast<int>(role));
+        }
 
         if (keepImportedMapping) {
             bool okRow = false;
@@ -151,6 +157,10 @@ plotapp::Layer PointsEditorDialog::result() const {
                 mappedRowIndices.push_back(static_cast<std::size_t>(sourceRow));
             }
         }
+    }
+
+    if (!roleEditingEnabled_) {
+        copy.pointRoles.clear();
     }
 
     if (keepImportedMapping && mappedRowIndices.size() == copy.points.size()) {

@@ -84,15 +84,19 @@ Bounds computeBounds(const Project& project) {
             if (!pointIsVisible(*layer, i)) continue;
             const auto& point = layer->points[i];
             if (!std::isfinite(point.x) || !std::isfinite(point.y)) continue;
+            const double halfError = i < layer->errorValues.size() ? std::max(0.0, layer->errorValues[i]) * 0.5 : 0.0;
+            const double lowY = point.y - halfError;
+            const double highY = point.y + halfError;
             if (first) {
                 bounds.minX = bounds.maxX = point.x;
-                bounds.minY = bounds.maxY = point.y;
+                bounds.minY = lowY;
+                bounds.maxY = highY;
                 first = false;
             } else {
                 bounds.minX = std::min(bounds.minX, point.x);
                 bounds.maxX = std::max(bounds.maxX, point.x);
-                bounds.minY = std::min(bounds.minY, point.y);
-                bounds.maxY = std::max(bounds.maxY, point.y);
+                bounds.minY = std::min(bounds.minY, lowY);
+                bounds.maxY = std::max(bounds.maxY, highY);
             }
         }
     }
@@ -227,7 +231,7 @@ std::string SvgRenderer::renderToString(const Project& project, int width, int h
         const auto primaryColor = safeColor(layer->style.color);
         const auto secondaryColor = safeColor(layer->style.secondaryColor, primaryColor);
         out << R"(<rect x=")" << legendX << R"(" y=")" << legendY << R"(" width="170" height="26" rx="4" ry="4" fill=")" << legendBg << R"(" stroke=")" << foreground << R"("/>)";
-        if (!layer->pointRoles.empty() && secondaryColor != primaryColor) {
+        if (layerSupportsPointRoles(*layer) && !layer->pointRoles.empty() && secondaryColor != primaryColor) {
             out << R"(<rect x=")" << (legendX + 8) << R"(" y=")" << (legendY + 8) << R"(" width="8" height="10" fill=")" << primaryColor << R"("/>)";
             out << R"(<rect x=")" << (legendX + 18) << R"(" y=")" << (legendY + 8) << R"(" width="8" height="10" fill=")" << secondaryColor << R"("/>)";
         } else {

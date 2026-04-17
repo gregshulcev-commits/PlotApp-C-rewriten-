@@ -31,6 +31,7 @@
 
 #include <functional>
 #include <map>
+#include <string>
 
 namespace plotapp::ui {
 
@@ -47,6 +48,7 @@ MainWindow::MainWindow(QWidget* parent)
     connect(canvas_, &PlotCanvasWidget::titleClicked, this, &MainWindow::editProjectTitleInline);
     connect(canvas_, &PlotCanvasWidget::xLabelClicked, this, &MainWindow::editXAxisInline);
     connect(canvas_, &PlotCanvasWidget::yLabelClicked, this, &MainWindow::editYAxisInline);
+    connect(canvas_, &PlotCanvasWidget::pointSelectionChanged, this, &MainWindow::onPointSelectionChanged);
 
     buildDocks();
     buildMenus();
@@ -163,6 +165,8 @@ void MainWindow::buildDocks() {
     addDockWidget(Qt::LeftDockWidgetArea, layerDock_);
     configureFloatingDock(layerDock_);
     connect(layerTree_, &QTreeWidget::itemChanged, this, &MainWindow::onLayerItemChanged);
+    connect(layerTree_, &QTreeWidget::currentItemChanged, this, &MainWindow::onCurrentLayerChanged);
+    connect(layerTree_, &QTreeWidget::itemClicked, this, &MainWindow::onLayerItemClicked);
     connect(layerTree_, &QTreeWidget::itemDoubleClicked, this, &MainWindow::onLayerDoubleClicked);
 
     consoleDock_ = new QDockWidget("Command console", this);
@@ -201,6 +205,8 @@ void MainWindow::buildDocks() {
 
 void MainWindow::refreshLayers() {
     if (layerTree_ == nullptr) return;
+    const QString previousSelectedId = selectedLayerId();
+
     layerTree_->blockSignals(true);
     layerTree_->clear();
     std::map<std::string, QTreeWidgetItem*> items;
@@ -221,6 +227,9 @@ void MainWindow::refreshLayers() {
             for (int visible : layer.pointVisibility) if (visible == 0) ++hiddenCount;
             if (hiddenCount > 0) details += QString("\nhidden points=%1").arg(hiddenCount);
         }
+        if (!layer.pluginSourcePointIndices.empty()) {
+            details += QString("\nselected source points=%1").arg(static_cast<int>(layer.pluginSourcePointIndices.size()));
+        }
         item->setToolTip(0, details);
         items[layer.id] = item;
     }
@@ -234,7 +243,20 @@ void MainWindow::refreshLayers() {
         }
     }
     layerTree_->expandAll();
+
+    QTreeWidgetItem* restoredItem = nullptr;
+    if (!previousSelectedId.isEmpty()) {
+        const auto it = items.find(previousSelectedId.toStdString());
+        if (it != items.end()) restoredItem = it->second;
+    }
+    layerTree_->setCurrentItem(restoredItem);
     layerTree_->blockSignals(false);
+
+    if (restoredItem != nullptr) {
+        canvas_->setSelectedLayerId(restoredItem->data(0, Qt::UserRole).toString().toStdString());
+    } else {
+        canvas_->setSelectedLayerId(std::string{});
+    }
     canvas_->update();
 }
 
@@ -270,11 +292,14 @@ void MainWindow::addManualLayer() {
 }
 
 void MainWindow::addFormulaLayer() {
+    const bool hadLayers = !controller_.project().layers().empty();
     FormulaLayerDialog dialog(this);
+    if (hadLayers) dialog.setSuggestedRange(canvas_->viewXMin(), canvas_->viewXMax());
     if (dialog.exec() != QDialog::Accepted) return;
     try {
         controller_.createFormulaLayer(dialog.layerName().toStdString(), dialog.expression().toStdString(), dialog.xMin(), dialog.xMax(), dialog.samples());
-        canvas_->resetViewToProject();
+        if (!hadLayers) canvas_->resetViewToProject();
+        else canvas_->update();
         refreshLayers();
     } catch (const std::exception& ex) {
         QMessageBox::critical(this, "Formula error", ex.what());
@@ -377,10 +402,21 @@ void MainWindow::runSelectedPlugin() {
         return;
     }
     const auto* sourceLayer = controller_.project().findLayer(layerId.toStdString());
+    if (sourceLayer == nullptr) {
+        QMessageBox::information(this, "Apply plugin", "Selected layer is no longer available.");
+        return;
+    }
+
+    const auto& selectedPointIndices = canvas_->selectedPointIndices();
+    if (selectedPointIndices.empty()) {
+        QMessageBox::information(this, "Apply plugin", "No points are selected on the chosen source layer.");
+        return;
+    }
+
     PluginRunDialog dialog(controller_.pluginManager().plugins(), sourceLayer, this);
     if (dialog.exec() != QDialog::Accepted) return;
     try {
-        controller_.applyPlugin(dialog.pluginId().toStdString(), layerId.toStdString(), dialog.params().toStdString());
+        controller_.applyPlugin(dialog.pluginId().toStdString(), layerId.toStdString(), dialog.params().toStdString(), selectedPointIndices);
         refreshLayers();
     } catch (const std::exception& ex) {
         QMessageBox::critical(this, "Plugin error", ex.what());
@@ -462,6 +498,36 @@ void MainWindow::onLayerItemChanged(QTreeWidgetItem* item, int) {
         layer->visible = visible;
     }
     canvas_->update();
+}
+
+void MainWindow::onCurrentLayerChanged(QTreeWidgetItem* current, QTreeWidgetItem*) {
+    if (current == nullptr) {
+        canvas_->setSelectedLayerId(std::string{});
+        return;
+    }
+    canvas_->setSelectedLayerId(current->data(0, Qt::UserRole).toString().toStdString());
+}
+
+void MainWindow::onLayerItemClicked(QTreeWidgetItem* item, int) {
+    if (item == nullptr) return;
+    canvas_->setSelectedLayerId(item->data(0, Qt::UserRole).toString().toStdString());
+}
+
+void MainWindow::onPointSelectionChanged(const QString& layerId, int selectedCount, int totalCount, bool wholeLayer) {
+    if (layerId.isEmpty()) {
+        statusBar()->clearMessage();
+        return;
+    }
+
+    QString layerLabel = layerId;
+    if (const auto* layer = controller_.project().findLayer(layerId.toStdString())) {
+        layerLabel = QString::fromStdString(layer->name);
+    }
+
+    const QString message = wholeLayer
+        ? QString("Selected entire layer '%1' (%2 point(s)). Shift+drag on the plot to restrict plugin input.").arg(layerLabel).arg(totalCount)
+        : QString("Selected %1 of %2 point(s) in layer '%3'.").arg(selectedCount).arg(totalCount).arg(layerLabel);
+    statusBar()->showMessage(message, 5000);
 }
 
 void MainWindow::onLayerDoubleClicked(QTreeWidgetItem*, int) {

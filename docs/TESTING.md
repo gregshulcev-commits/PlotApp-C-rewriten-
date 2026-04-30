@@ -61,11 +61,13 @@ ASAN_OPTIONS=detect_leaks=1 ctest --test-dir build_asan --output-on-failure
 6. Hide one extrema point in the points editor, save, reopen, and confirm the hidden point stays hidden.
 7. Apply `smooth_curve` and `newton_polynomial` (change degree in the dialog).
 8. Float the Layers and Command console docks, move/resize them, close them, then restore them from the toolbar/menu.
-9. Export SVG and confirm the visible plot state matches the canvas.
-10. Run `install_app.sh --with-gui` on a workstation whose user path contains spaces or `&` and confirm the generated GNOME launcher still starts PlotApp.
-11. Open **File -> Settings -> Updates** from the managed install and confirm build version, installed version, install time, and installed commit are populated from the manifest.
-12. Click **Check updates** and confirm the remote commit/status fields change exactly as `update_app.sh --check-only` reports.
-13. Trigger **Update** against a test repository, confirm the managed install is replaced successfully, and confirm the dialog asks for an application restart.
+9. Open **File -> Export image...**, switch between **Current canvas** and **A4** presets, and confirm the preview always shows the full visible canvas without cropping.
+10. Export both PNG and SVG and confirm the written file matches the current canvas viewport instead of resetting/rebuilding the plot.
+11. In dark theme confirm the plot title and X/Y axis labels export in white; in light theme confirm they export in black.
+12. Run `install_app.sh --with-gui` on a workstation whose user path contains spaces or `&` and confirm the generated GNOME launcher still starts PlotApp.
+13. Open **File -> Settings -> Updates** from the managed install and confirm build version, installed version, install time, and installed commit are populated from the manifest.
+14. Click **Check updates** and confirm the remote commit/status fields change exactly as `update_app.sh --check-only` reports.
+15. Trigger **Update** against a test repository, confirm the managed install is replaced successfully, and confirm the dialog asks for an application restart.
 
 ## Why the test split looks this way
 

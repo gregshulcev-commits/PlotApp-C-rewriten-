@@ -159,7 +159,7 @@ std::string SvgRenderer::renderToString(const Project& project, int width, int h
     const auto bounds = computeBounds(project);
     const bool dark = project.settings().uiTheme == "dark";
     const std::string windowColor = dark ? "#202124" : "white";
-    const std::string foreground = dark ? "#e8eaed" : "black";
+    const std::string foreground = dark ? "#ffffff" : "#000000";
     const std::string plotBackground = dark ? "#111315" : "white";
     const std::string gridColor = dark ? "#3c4043" : "#e6e6e6";
     const std::string legendBg = dark ? "#2b2c30" : "white";

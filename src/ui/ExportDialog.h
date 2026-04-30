@@ -4,6 +4,7 @@
 
 class QComboBox;
 class QLabel;
+class QResizeEvent;
 class QSpinBox;
 
 namespace plotapp::ui {
@@ -26,6 +27,9 @@ public:
     int dpi() const;
     QString defaultSuffix() const;
     QString fileFilter() const;
+
+protected:
+    void resizeEvent(QResizeEvent* event) override;
 
 private slots:
     void onPresetChanged();

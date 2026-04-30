@@ -625,7 +625,7 @@ void test_svg_export_security_and_formula_render() {
     require(svg.find("#1f77b4") != std::string::npos, "Unsafe SVG color should fall back to default");
     require(svg.find("<path") != std::string::npos, "Formula layer should render as an SVG path");
     require(svg.find("fill=\"none\"") != std::string::npos, "Continuous SVG path should not be filled");
-    require(svg.find("fill=\"#e8eaed\"") != std::string::npos, "Dark theme text should export with light foreground");
+    require(svg.find("fill=\"#ffffff\"") != std::string::npos, "Dark theme text should export with white foreground");
 }
 
 void test_command_dispatcher() {

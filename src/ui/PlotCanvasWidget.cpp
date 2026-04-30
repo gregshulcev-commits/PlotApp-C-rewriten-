@@ -2,11 +2,14 @@
 
 #include "plotapp/LayerSampler.h"
 
+#include <QBuffer>
+#include <QByteArray>
 #include <QFontMetricsF>
 #include <QImage>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
+#include <QSaveFile>
 #include <QTextDocument>
 #include <QWheelEvent>
 
@@ -213,33 +216,48 @@ bool PlotCanvasWidget::exportPng(const QString& path, const QSize& size, int dpi
     return image.save(path, "PNG");
 }
 
+bool PlotCanvasWidget::exportSvgSnapshot(const QString& path, const QSize& size, int dpi) const {
+    const QImage image = renderToImage(size, dpi);
+    if (image.isNull()) return false;
+
+    QByteArray pngBytes;
+    QBuffer buffer(&pngBytes);
+    if (!buffer.open(QIODevice::WriteOnly) || !image.save(&buffer, "PNG")) return false;
+
+    const QString svg = QStringLiteral(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"%1\" height=\"%2\" viewBox=\"0 0 %1 %2\">"
+        "<image width=\"%1\" height=\"%2\" preserveAspectRatio=\"none\" href=\"data:image/png;base64,%3\"/>"
+        "</svg>")
+        .arg(image.width())
+        .arg(image.height())
+        .arg(QString::fromLatin1(pngBytes.toBase64()));
+
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) return false;
+    file.write(svg.toUtf8());
+    return file.commit();
+}
+
 QImage PlotCanvasWidget::renderToImage(const QSize& size, int dpi) const {
+    const QSize sourceSize = this->size().expandedTo(QSize(32, 32));
     const QSize targetSize = size.expandedTo(QSize(32, 32));
     QImage image(targetSize, QImage::Format_ARGB32_Premultiplied);
-    image.fill(palette().window().color());
+    image.fill(Qt::transparent);
     if (dpi > 0) {
         const double dotsPerMeter = static_cast<double>(dpi) / 0.0254;
         image.setDotsPerMeterX(static_cast<int>(std::lround(dotsPerMeter)));
         image.setDotsPerMeterY(static_cast<int>(std::lround(dotsPerMeter)));
     }
 
-    PlotCanvasWidget preview;
-    preview.resize(targetSize);
-    preview.setPalette(palette());
-    preview.setFont(font());
-    preview.setProject(project_);
-    preview.viewXMin_ = viewXMin_;
-    preview.viewXMax_ = viewXMax_;
-    preview.viewYMin_ = viewYMin_;
-    preview.viewYMax_ = viewYMax_;
-    preview.selectedLayerId_.clear();
-    preview.selectedPointIndices_.clear();
-    preview.selectingPoints_ = false;
-    preview.draggingLegend_ = false;
-    preview.draggingView_ = false;
-
     QPainter painter(&image);
-    preview.render(&painter);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setRenderHint(QPainter::TextAntialiasing, true);
+    const double scaleX = static_cast<double>(targetSize.width()) / static_cast<double>(sourceSize.width());
+    const double scaleY = static_cast<double>(targetSize.height()) / static_cast<double>(sourceSize.height());
+    painter.scale(scaleX, scaleY);
+    auto* self = const_cast<PlotCanvasWidget*>(this);
+    self->render(&painter, QPoint(), QRegion(rect()), QWidget::DrawWindowBackground | QWidget::DrawChildren);
     return image;
 }
 
@@ -452,9 +470,11 @@ void PlotCanvasWidget::paintEvent(QPaintEvent*) {
 
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing, true);
-    const bool dark = palette().window().color().lightness() < 128;
+    const bool dark = project_ != nullptr
+        ? project_->settings().uiTheme == "dark"
+        : palette().window().color().lightness() < 128;
     const QColor bg = dark ? QColor("#202124") : QColor("#f6f7f9");
-    const QColor fg = dark ? QColor("#e8eaed") : QColor("#111111");
+    const QColor fg = dark ? QColor("#ffffff") : QColor("#000000");
     const QColor grid = dark ? QColor("#3c4043") : QColor("#d9d9d9");
     const QColor plotBg = dark ? QColor("#111315") : QColor("#ffffff");
     const QColor selectionColor = palette().highlight().color().isValid() ? palette().highlight().color() : QColor("#4285f4");

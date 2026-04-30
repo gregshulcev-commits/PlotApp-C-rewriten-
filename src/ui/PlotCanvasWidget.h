@@ -24,6 +24,7 @@ public:
     void setProject(plotapp::Project* project);
     bool exportPng(const QString& path) const;
     bool exportPng(const QString& path, const QSize& size, int dpi = 0) const;
+    bool exportSvgSnapshot(const QString& path, const QSize& size, int dpi = 0) const;
     QImage renderToImage(const QSize& size, int dpi = 0) const;
     void resetViewToProject();
 

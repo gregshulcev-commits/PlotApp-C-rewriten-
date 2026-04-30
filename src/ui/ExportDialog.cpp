@@ -11,7 +11,6 @@
 #include <QLabel>
 #include <QPixmap>
 #include <QPushButton>
-#include <QResizeEvent>
 #include <QSizePolicy>
 #include <QSpinBox>
 #include <QVBoxLayout>
@@ -19,20 +18,11 @@
 namespace plotapp::ui {
 namespace {
 
-constexpr int kPreviewFallbackWidth = 720;
-constexpr int kPreviewFallbackHeight = 420;
+constexpr int kPreviewMaxWidth = 720;
+constexpr int kPreviewMaxHeight = 420;
 
 QString sizeLabel(const QSize& size) {
     return QString("%1 x %2 px").arg(size.width()).arg(size.height());
-}
-
-QSize previewViewportSize(const QLabel* label) {
-    if (label == nullptr) return QSize(kPreviewFallbackWidth, kPreviewFallbackHeight);
-    const QSize current = label->size();
-    if (current.width() >= 160 && current.height() >= 160) {
-        return current - QSize(16, 16);
-    }
-    return QSize(kPreviewFallbackWidth, kPreviewFallbackHeight);
 }
 
 } // namespace
@@ -46,8 +36,8 @@ ExportDialog::ExportDialog(const PlotCanvasWidget* canvas, QWidget* parent)
     auto* form = new QFormLayout();
 
     formatBox_ = new QComboBox(this);
-    formatBox_->addItem("PNG image", static_cast<int>(FileFormat::Png));
-    formatBox_->addItem("SVG image", static_cast<int>(FileFormat::Svg));
+    formatBox_->addItem("PNG raster image", static_cast<int>(FileFormat::Png));
+    formatBox_->addItem("SVG vector image", static_cast<int>(FileFormat::Svg));
 
     presetBox_ = new QComboBox(this);
     presetBox_->addItem("Current canvas size", "current");
@@ -70,7 +60,7 @@ ExportDialog::ExportDialog(const PlotCanvasWidget* canvas, QWidget* parent)
     heightSpin_->setSingleStep(64);
 
     form->addRow("Format", formatBox_);
-    form->addRow("Page / target size", presetBox_);
+    form->addRow("Canvas preset", presetBox_);
     form->addRow("DPI / print density", dpiSpin_);
     form->addRow("Width", widthSpin_);
     form->addRow("Height", heightSpin_);
@@ -136,11 +126,6 @@ QString ExportDialog::fileFilter() const {
         : QStringLiteral("PNG image (*.png);;All files (*)");
 }
 
-void ExportDialog::resizeEvent(QResizeEvent* event) {
-    QDialog::resizeEvent(event);
-    if (summaryLabel_ != nullptr && previewHintLabel_ != nullptr && previewLabel_ != nullptr) updatePreview();
-}
-
 QSize ExportDialog::exportSize() const {
     return QSize(widthSpin_->value(), heightSpin_->value());
 }
@@ -185,21 +170,21 @@ void ExportDialog::applyPresetSelection() {
 
 QString ExportDialog::presetDescription() const {
     const QString preset = presetBox_->currentData().toString();
-    if (preset == "current") return QString("Writes the visible canvas exactly at the current on-screen pixel size.");
-    if (preset == "a4_portrait") return QString("Scales the visible canvas to an A4 portrait page at the selected DPI.");
-    if (preset == "a4_landscape") return QString("Scales the visible canvas to an A4 landscape page at the selected DPI.");
-    return QString("Scales the visible canvas to the exact custom output size below.");
+    if (preset == "current") return QString("Matches the current on-screen canvas size.");
+    if (preset == "a4_portrait") return QString("Fits the plot into an A4 portrait page at the selected DPI.");
+    if (preset == "a4_landscape") return QString("Fits the plot into an A4 landscape page at the selected DPI.");
+    return QString("Custom export size. Use this when you need exact pixel dimensions.");
 }
 
 void ExportDialog::updatePreview() {
     const QSize targetSize = exportSize();
-    summaryLabel_->setText(QString("Export visible canvas: %1. %2")
+    summaryLabel_->setText(QString("Export canvas: %1. %2")
         .arg(sizeLabel(targetSize), presetDescription()));
 
     if (format() == FileFormat::Svg) {
-        previewHintLabel_->setText("SVG export keeps the current visible canvas composition inside an SVG page. The preview shows the exact exported page contents.");
+        previewHintLabel_->setText("SVG is vector-based. The preview below is a raster approximation of the final composition and aspect ratio.");
     } else {
-        previewHintLabel_->setText("PNG export writes the current visible canvas at the selected page size. The preview shows the exact exported page contents.");
+        previewHintLabel_->setText("PNG is raster-based. The preview below shows the final pixel aspect ratio.");
     }
 
     if (canvas_ == nullptr || !targetSize.isValid()) {
@@ -209,23 +194,13 @@ void ExportDialog::updatePreview() {
     }
 
     QSize previewSize = targetSize;
-    previewSize.scale(previewViewportSize(previewLabel_), Qt::KeepAspectRatio);
+    previewSize.scale(kPreviewMaxWidth, kPreviewMaxHeight, Qt::KeepAspectRatio);
     if (previewSize.width() < 64 || previewSize.height() < 64) {
         previewSize = previewSize.expandedTo(QSize(64, 64));
     }
 
     const QImage previewImage = canvas_->renderToImage(previewSize);
-    if (previewImage.isNull()) {
-        previewLabel_->setText("Preview is unavailable.");
-        previewLabel_->setPixmap(QPixmap());
-        return;
-    }
-
-    QPixmap previewPixmap = QPixmap::fromImage(previewImage);
-    const QSize fitSize = previewViewportSize(previewLabel_).expandedTo(QSize(64, 64));
-    previewPixmap = previewPixmap.scaled(fitSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-    previewLabel_->setText({});
-    previewLabel_->setPixmap(previewPixmap);
+    previewLabel_->setPixmap(QPixmap::fromImage(previewImage));
 }
 
 } // namespace plotapp::ui

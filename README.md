@@ -31,8 +31,7 @@ This revision keeps the layered architecture intact and focuses on plugin-target
 - replaced the separate desktop PNG/SVG actions with a single **Export image...** workflow:
   - choose **PNG** or **SVG** in one dialog;
   - choose **Current canvas**, **A4 portrait**, **A4 landscape**, or **Custom** export size;
-  - preview the exact visible canvas composition before saving;
-  - A4/custom export now scales the current visible canvas instead of rebuilding a second plot layout with tiny fonts/thin lines.
+  - preview the composition before saving.
 - the `linear_fit` plugin now exposes a desktop option to extend the fitted line so it shows intersections with the **X** and **Y** axes.
 - project save/load format was extended to store derived-layer source selections while remaining backward-compatible with older project files.
 
@@ -85,9 +84,8 @@ GUI:
 - use **File -> Export image...**
 - choose **PNG** or **SVG** in one dialog
 - presets: **Current canvas**, **A4 portrait**, **A4 landscape**, **Custom**
-- the dialog preview always shows the full visible canvas that will be written
-- for print/export workflows, the A4 presets compute pixel dimensions from the selected DPI and scale the current visible canvas to that page size
-- desktop SVG export now preserves the current visible canvas composition inside the exported SVG page, while CLI/headless SVG export still uses `SvgRenderer`
+- the dialog shows a preview before the file is written
+- for print/export workflows, the A4 presets compute pixel dimensions from the selected DPI
 
 ## Formula syntax
 Examples:

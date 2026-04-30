@@ -43,9 +43,8 @@ This file maps the latest requested changes to the current source update.
 ## 8. Make popup dialogs medium-sized and improve export UX
 - `src/ui/DialogUtil.h` centralizes default dialog sizing
 - the main user dialogs now use medium-sized default windows instead of very small popups
-- `src/ui/ExportDialog.*` adds a unified export workflow with format selection, A4 presets, DPI, and a full-page preview of the visible canvas
-- `src/ui/PlotCanvasWidget.*` now renders desktop exports from the current visible canvas state so A4/custom export keeps screen-relative font/line scale instead of rebuilding a second layout
-- `src/ui/MainWindow.cpp` routes both PNG and SVG desktop export through the canvas-based export path
+- `src/ui/ExportDialog.*` adds a unified export workflow with format selection, A4 presets, DPI, and preview
+- `src/ui/MainWindow.cpp` replaces the separate desktop PNG/SVG actions with one export entry point
 
 ## 9. Add a desktop option for linear approximation axis intersections
 - `plugins/linear_fit/linear_fit_plugin.cpp` accepts `show_axis_intersections=1`

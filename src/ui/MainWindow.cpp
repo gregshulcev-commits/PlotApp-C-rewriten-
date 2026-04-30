@@ -377,13 +377,9 @@ void MainWindow::exportImage() {
     if (!path.endsWith(suffix, Qt::CaseInsensitive)) path += suffix;
 
     try {
-        const QSize exportSize(dialog.widthPx(), dialog.heightPx());
         if (dialog.format() == ExportDialog::FileFormat::Svg) {
-            if (!canvas_->exportSvgSnapshot(path, exportSize, dialog.dpi())) {
-                QMessageBox::warning(this, "Export image", "Failed to save SVG");
-                return;
-            }
-        } else if (!canvas_->exportPng(path, exportSize, dialog.dpi())) {
+            controller_.exportSvg(path.toStdString(), dialog.widthPx(), dialog.heightPx());
+        } else if (!canvas_->exportPng(path, QSize(dialog.widthPx(), dialog.heightPx()), dialog.dpi())) {
             QMessageBox::warning(this, "Export image", "Failed to save PNG");
             return;
         }

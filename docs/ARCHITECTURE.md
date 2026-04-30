@@ -142,16 +142,16 @@ Current project + current viewport
  -> Export dialog
  -> format selection (PNG/SVG)
  -> size preset selection (Current/A4 portrait/A4 landscape/Custom)
- -> preview rendering from the current canvas composition
- -> file write via PlotCanvasWidget PNG export or PlotCanvasWidget SVG snapshot export
+ -> preview rendering from the canvas composition
+ -> file write via PNG raster export or SvgRenderer
 ```
 
-The desktop export path now always uses the current visible canvas as the source of truth. A4/custom exports scale that canvas to the requested page size instead of rebuilding a separate plot layout.
+This keeps raster and vector export in a single user workflow while still delegating final SVG generation to the headless renderer.
 
 ## Rendering split
 
-- `SvgRenderer` is the headless renderer used in tests, CLI automation, and non-Qt workflows.
-- `PlotCanvasWidget` is the interactive window renderer used in the Qt UI and is also the source for desktop PNG/SVG image export.
+- `SvgRenderer` is the headless renderer used in tests and automation.
+- `PlotCanvasWidget` is the interactive window renderer used in the Qt UI.
 - `LayerSampler` provides viewport-aware sampling for formulas and continuous derived layers.
 
 This split keeps export and automated checks independent from GUI availability while allowing both renderers to respect stored provenance such as selected source subsets and error-bar bounds.

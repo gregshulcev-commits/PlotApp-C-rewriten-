@@ -55,10 +55,9 @@ The export dialog combines both raster and vector export into one place:
 - inspect the preview before writing the file
 
 Notes:
-- PNG writes the current visible canvas directly at the selected output size;
-- desktop SVG export keeps the same visible canvas composition inside the SVG page, so the result matches the preview and the on-screen viewport;
-- A4 presets are useful when you want the current visible canvas scaled to a printable page size without rebuilding the plot in a different layout;
-- the preview is scaled to fit the dialog, but it always shows the full exported page.
+- PNG uses the selected pixel size directly;
+- SVG remains vector output, but the preview shows the same aspect ratio and composition;
+- A4 presets are useful when you want an export that already matches a printable page size.
 
 ## Role / min-max layers
 `Role` is no longer treated as a global point attribute.

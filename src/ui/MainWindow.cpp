@@ -13,226 +13,64 @@
 #include <QAbstractItemView>
 #include <QAction>
 #include <QApplication>
-#include <QCloseEvent>
 #include <QCompleter>
-#include <QDialog>
-#include <QDialogButtonBox>
-#include <QDir>
 #include <QDockWidget>
-#include <QEvent>
 #include <QFileDialog>
-#include <QFileInfo>
-#include <QFontMetrics>
-#include <QGridLayout>
 #include <QKeySequence>
-#include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
-#include <QPlainTextEdit>
-#include <QScreen>
 #include <QShortcut>
-#include <QSizePolicy>
-#include <QStandardPaths>
 #include <QStatusBar>
 #include <QSignalBlocker>
 #include <QStringListModel>
-#include <QTextDocument>
 #include <QTextEdit>
-#include <QTimer>
 #include <QToolBar>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
 #include <QVBoxLayout>
 
-#include <algorithm>
-#include <cmath>
 #include <functional>
 #include <map>
 #include <string>
 
 namespace plotapp::ui {
 
-namespace {
-
-constexpr double kA4LandscapeAspect = 297.0 / 210.0;
-constexpr double kA4PortraitAspect = 210.0 / 297.0;
-
-void adjustPlainTextEditorHeight(QPlainTextEdit* editor, QDialog* dialog = nullptr) {
-    if (editor == nullptr) return;
-    const int visibleLines = std::clamp(editor->document()->blockCount(), 3, 14);
-    const QFontMetrics metrics(editor->font());
-    const int frame = editor->frameWidth() * 2;
-    const int targetHeight = visibleLines * metrics.lineSpacing() + frame + 20;
-    editor->setFixedHeight(targetHeight);
-    if (dialog != nullptr) dialog->adjustSize();
-}
-
-} // namespace
-
-MainWindow::MainWindow(QWidget* parent, bool restoreAutosave)
+MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent), dispatcher_(controller_), baseFont_(qApp->font()) {
     setWindowTitle("PlotApp Modular UI");
     resize(1400, 900);
     setDockNestingEnabled(true);
     setDockOptions(AllowNestedDocks | AllowTabbedDocks | AnimatedDocks | GroupedDragging);
 
-    canvasHost_ = new QWidget(this);
-    canvasHostLayout_ = new QGridLayout(canvasHost_);
-    canvasHostLayout_->setContentsMargins(0, 0, 0, 0);
-    canvasHostLayout_->setSpacing(0);
-    canvas_ = new PlotCanvasWidget(canvasHost_);
+    canvas_ = new PlotCanvasWidget(this);
     canvas_->setProject(&controller_.project());
-    canvasHostLayout_->addWidget(canvas_, 0, 0);
-    canvasHost_->installEventFilter(this);
-    setCentralWidget(canvasHost_);
-
+    setCentralWidget(canvas_);
     connect(canvas_, &PlotCanvasWidget::titleClicked, this, &MainWindow::editProjectTitleInline);
     connect(canvas_, &PlotCanvasWidget::xLabelClicked, this, &MainWindow::editXAxisInline);
     connect(canvas_, &PlotCanvasWidget::yLabelClicked, this, &MainWindow::editYAxisInline);
-    connect(canvas_, &PlotCanvasWidget::legendClicked, this, &MainWindow::editLegendInline);
     connect(canvas_, &PlotCanvasWidget::pointSelectionChanged, this, &MainWindow::onPointSelectionChanged);
     auto* clearSelectionShortcut = new QShortcut(QKeySequence(Qt::Key_Escape), this);
     connect(clearSelectionShortcut, &QShortcut::activated, this, &MainWindow::clearCurrentSelection);
 
     buildDocks();
     buildMenus();
-    if (restoreAutosave) restoreAutosaveIfPresent();
     refreshLayers();
     applyTheme(QString::fromStdString(controller_.project().settings().uiTheme));
-    applyUiScale(controller_.project().settings().uiFontPercent);
-    startAutosave();
-    appendLog(restoreAutosave ? "Application started." : "New project window started.");
+    appendLog("Application started.");
 }
-
-bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
-    if (watched == canvasHost_ && event != nullptr && event->type() == QEvent::Resize) {
-        updateCanvasAspectConstraint();
-    }
-    return QMainWindow::eventFilter(watched, event);
-}
-
-void MainWindow::closeEvent(QCloseEvent* event) {
-    autosaveProject();
-    QMainWindow::closeEvent(event);
-}
-
-void MainWindow::newProjectWindow() {
-    auto* window = new MainWindow(nullptr, false);
-    window->setAttribute(Qt::WA_DeleteOnClose, true);
-    window->resize(size());
-    window->show();
-    window->raise();
-    window->activateWindow();
-}
-
-void MainWindow::fitCanvasA4Landscape() {
-    lockedCanvasAspect_ = kA4LandscapeAspect;
-    updateCanvasAspectConstraint();
-    statusBar()->showMessage("Canvas fitted to A4 landscape ratio", 2500);
-}
-
-void MainWindow::fitCanvasA4Portrait() {
-    lockedCanvasAspect_ = kA4PortraitAspect;
-    updateCanvasAspectConstraint();
-    statusBar()->showMessage("Canvas fitted to A4 portrait ratio", 2500);
-}
-
-void MainWindow::releaseCanvasAspect() {
-    lockedCanvasAspect_ = 0.0;
-    updateCanvasAspectConstraint();
-    statusBar()->showMessage("Canvas aspect lock released", 2500);
-}
-
-void MainWindow::updateCanvasAspectConstraint() {
-    if (canvas_ == nullptr || canvasHost_ == nullptr || canvasHostLayout_ == nullptr) return;
-
-    if (lockedCanvasAspect_ <= 0.0 || !std::isfinite(lockedCanvasAspect_)) {
-        canvas_->setMinimumSize(700, 450);
-        canvas_->setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
-        canvas_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-        canvasHostLayout_->setAlignment(canvas_, Qt::Alignment());
-        return;
-    }
-
-    const QSize available = canvasHost_->contentsRect().size();
-    if (available.width() <= 0 || available.height() <= 0) return;
-
-    int targetWidth = available.width();
-    int targetHeight = static_cast<int>(std::lround(static_cast<double>(targetWidth) / lockedCanvasAspect_));
-    if (targetHeight > available.height()) {
-        targetHeight = available.height();
-        targetWidth = static_cast<int>(std::lround(static_cast<double>(targetHeight) * lockedCanvasAspect_));
-    }
-    targetWidth = std::max(64, targetWidth);
-    targetHeight = std::max(64, targetHeight);
-
-    canvas_->setMinimumSize(64, 64);
-    canvas_->setMaximumSize(targetWidth, targetHeight);
-    canvas_->setFixedSize(targetWidth, targetHeight);
-    canvas_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    canvasHostLayout_->setAlignment(canvas_, Qt::AlignCenter);
-    canvas_->update();
-}
-
-QString MainWindow::autosaveFilePath() const {
-    QString root = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
-    if (root.isEmpty()) root = QDir::tempPath() + "/plotapp-cache";
-    QDir dir(root);
-    if (!dir.exists()) dir.mkpath(".");
-    return dir.filePath("autosave.plotapp");
-}
-
-bool MainWindow::projectHasUserContent() const {
-    const auto& project = controller_.project();
-    const auto& settings = project.settings();
-    return !project.layers().empty()
-        || settings.title != "PlotApp Project"
-        || settings.xLabel != "X"
-        || settings.yLabel != "Y";
-}
-
-void MainWindow::startAutosave() {
-    if (autosaveTimer_ != nullptr) return;
-    autosaveTimer_ = new QTimer(this);
-    autosaveTimer_->setInterval(15000);
-    autosaveTimer_->setSingleShot(false);
-    connect(autosaveTimer_, &QTimer::timeout, this, &MainWindow::autosaveProject);
-    autosaveTimer_->start();
-}
-
-void MainWindow::autosaveProject() {
-    if (!projectHasUserContent()) return;
-    const QString path = autosaveFilePath();
-    try {
-        controller_.saveProject(path.toStdString());
-    } catch (const std::exception& ex) {
-        appendLog(QString("Autosave failed: %1").arg(QString::fromUtf8(ex.what())));
-    }
-}
-
-bool MainWindow::restoreAutosaveIfPresent() {
-    const QString path = autosaveFilePath();
-    if (!QFileInfo::exists(path)) return false;
-    try {
-        controller_.openProject(path.toStdString());
-        canvas_->setProject(&controller_.project());
-        const auto warnings = controller_.recomputeDerivedLayers();
-        appendLog(QString("Autosaved project restored from %1").arg(path));
-        for (const auto& warning : warnings) appendLog(QString::fromStdString(warning));
-        return true;
-    } catch (const std::exception& ex) {
-        appendLog(QString("Autosave restore failed: %1").arg(QString::fromUtf8(ex.what())));
-        return false;
-    }
-}
-
 
 void MainWindow::buildMenus() {
     auto* fileMenu = menuBar()->addMenu("&File");
-    auto* newProjectAction = fileMenu->addAction("New project in new window", this, &MainWindow::newProjectWindow);
-    newProjectAction->setShortcut(QKeySequence::New);
+    fileMenu->addAction("New project", [this]() {
+        controller_.reset();
+        canvas_->setProject(&controller_.project());
+        refreshLayers();
+        applyTheme(QString::fromStdString(controller_.project().settings().uiTheme));
+        applyUiScale(controller_.project().settings().uiFontPercent);
+        canvas_->resetViewToProject();
+    });
     fileMenu->addAction("Open project...", this, &MainWindow::openProject);
     auto* saveAction = fileMenu->addAction("Save project...", this, &MainWindow::saveProject);
     saveAction->setShortcut(QKeySequence::Save);
@@ -265,9 +103,6 @@ void MainWindow::buildMenus() {
 
     auto* viewMenu = menuBar()->addMenu("&View");
     viewMenu->addAction("Reset view to data", this, &MainWindow::resetView);
-    viewMenu->addAction("Fit canvas to A4 landscape", this, &MainWindow::fitCanvasA4Landscape);
-    viewMenu->addAction("Fit canvas to A4 portrait", this, &MainWindow::fitCanvasA4Portrait);
-    viewMenu->addAction("Release canvas aspect lock", this, &MainWindow::releaseCanvasAspect);
     viewMenu->addAction("Restore default panel layout", [this]() { restorePanelsDefaultLayout(); });
     viewMenu->addSeparator();
     if (layerDock_ != nullptr) viewMenu->addAction(layerDock_->toggleViewAction());
@@ -369,13 +204,6 @@ void MainWindow::buildDocks() {
     panelsToolbar_->addAction(consoleDock_->toggleViewAction());
     panelsToolbar_->addSeparator();
     panelsToolbar_->addAction("Reset panel layout", [this]() { restorePanelsDefaultLayout(); });
-
-    canvasToolbar_ = addToolBar("Canvas");
-    canvasToolbar_->setObjectName("CanvasToolbar");
-    canvasToolbar_->setFloatable(true);
-    canvasToolbar_->addAction("A4 screenshot", this, &MainWindow::fitCanvasA4Landscape);
-    canvasToolbar_->addAction("A4 portrait", this, &MainWindow::fitCanvasA4Portrait);
-    canvasToolbar_->addAction("Free canvas", this, &MainWindow::releaseCanvasAspect);
 }
 
 void MainWindow::refreshLayers() {
@@ -454,7 +282,6 @@ void MainWindow::importData() {
         controller_.importLayer(path.toStdString(), dialog.xColumn(), dialog.yColumn(), dialog.layerName().toStdString());
         canvas_->resetViewToProject();
         refreshLayers();
-        autosaveProject();
     } catch (const std::exception& ex) {
         QMessageBox::critical(this, "Import error", ex.what());
     }
@@ -465,7 +292,6 @@ void MainWindow::addManualLayer() {
     if (dialog.exec() != QDialog::Accepted) return;
     controller_.createManualLayer(dialog.text().toStdString());
     refreshLayers();
-    autosaveProject();
 }
 
 void MainWindow::addFormulaLayer() {
@@ -478,7 +304,6 @@ void MainWindow::addFormulaLayer() {
         if (!hadLayers) canvas_->resetViewToProject();
         else canvas_->update();
         refreshLayers();
-        autosaveProject();
     } catch (const std::exception& ex) {
         QMessageBox::critical(this, "Formula error", ex.what());
     }
@@ -496,7 +321,6 @@ void MainWindow::editProjectTitleInline() {
     if (dialog.exec() != QDialog::Accepted) return;
     controller_.project().settings().title = dialog.text().toStdString();
     canvas_->update();
-    autosaveProject();
 }
 
 void MainWindow::editXAxisInline() {
@@ -504,7 +328,6 @@ void MainWindow::editXAxisInline() {
     if (dialog.exec() != QDialog::Accepted) return;
     controller_.project().settings().xLabel = dialog.text().toStdString();
     canvas_->update();
-    autosaveProject();
 }
 
 void MainWindow::editYAxisInline() {
@@ -512,7 +335,6 @@ void MainWindow::editYAxisInline() {
     if (dialog.exec() != QDialog::Accepted) return;
     controller_.project().settings().yLabel = dialog.text().toStdString();
     canvas_->update();
-    autosaveProject();
 }
 
 void MainWindow::saveProject() {
@@ -521,7 +343,6 @@ void MainWindow::saveProject() {
     if (!path.endsWith(".plotapp") && !path.endsWith(".txt")) path += ".plotapp";
     try {
         controller_.saveProject(path.toStdString());
-        autosaveProject();
         statusBar()->showMessage("Project saved", 2000);
     } catch (const std::exception& ex) {
         QMessageBox::critical(this, "Save error", ex.what());
@@ -539,7 +360,6 @@ void MainWindow::openProject() {
         applyTheme(QString::fromStdString(controller_.project().settings().uiTheme));
         applyUiScale(controller_.project().settings().uiFontPercent);
         for (const auto& warning : warnings) appendLog(QString::fromStdString(warning));
-        autosaveProject();
         statusBar()->showMessage("Project opened", 2000);
     } catch (const std::exception& ex) {
         QMessageBox::critical(this, "Open error", ex.what());
@@ -558,20 +378,13 @@ void MainWindow::exportImage() {
 
     try {
         const QSize exportSize(dialog.widthPx(), dialog.heightPx());
-        constexpr long long kMaxExportPixels = 64ll * 1024ll * 1024ll;
-        const long long exportPixels = static_cast<long long>(exportSize.width()) * static_cast<long long>(exportSize.height());
-        if (exportPixels <= 0 || exportPixels > kMaxExportPixels) {
-            QMessageBox::warning(this, "Export image",
-                                 "The selected export size is too large. Reduce width or height and try again.");
-            return;
-        }
         if (dialog.format() == ExportDialog::FileFormat::Svg) {
             if (!canvas_->exportSvgSnapshot(path, exportSize, dialog.dpi())) {
-                QMessageBox::warning(this, "Export image", "Failed to save SVG. Check write permissions and reduce export size if it is very large.");
+                QMessageBox::warning(this, "Export image", "Failed to save SVG");
                 return;
             }
         } else if (!canvas_->exportPng(path, exportSize, dialog.dpi())) {
-            QMessageBox::warning(this, "Export image", "Failed to save PNG. Check write permissions and reduce export size if it is very large.");
+            QMessageBox::warning(this, "Export image", "Failed to save PNG");
             return;
         }
         statusBar()->showMessage(QString("Exported %1").arg(path), 3000);
@@ -585,43 +398,6 @@ void MainWindow::openSettingsDialog() {
     if (dialog.exec() != QDialog::Accepted) return;
     applyTheme(dialog.theme());
     applyUiScale(dialog.scalePercent());
-    autosaveProject();
-}
-
-void MainWindow::editLegendInline(const QString& layerId) {
-    if (layerId.isEmpty()) return;
-    auto* layer = controller_.project().findLayer(layerId.toStdString());
-    if (layer == nullptr) return;
-
-    QDialog dialog(this);
-    dialog.setWindowTitle("Edit legend");
-    dialog.resize(560, 240);
-    auto* layout = new QVBoxLayout(&dialog);
-    auto* hint = new QLabel("Legend text. Press Enter for a new line. Drag the legend box to move it.", &dialog);
-    hint->setWordWrap(true);
-    layout->addWidget(hint);
-
-    auto* editor = new QPlainTextEdit(&dialog);
-    editor->setPlainText(QString::fromStdString(layer->legendText.empty() ? layer->name : layer->legendText));
-    editor->setLineWrapMode(QPlainTextEdit::WidgetWidth);
-    editor->setTabChangesFocus(true);
-    layout->addWidget(editor);
-
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    layout->addWidget(buttons);
-
-    connect(editor, &QPlainTextEdit::textChanged, &dialog, [editor, &dialog]() {
-        adjustPlainTextEditorHeight(editor, &dialog);
-    });
-    adjustPlainTextEditorHeight(editor, &dialog);
-
-    if (dialog.exec() != QDialog::Accepted) return;
-    layer->legendText = editor->toPlainText().toStdString();
-    if (layer->legendText.empty()) layer->legendText = layer->name;
-    canvas_->update();
-    autosaveProject();
 }
 
 void MainWindow::runSelectedPlugin() {
@@ -652,7 +428,6 @@ void MainWindow::runSelectedPlugin() {
     try {
         controller_.applyPlugin(dialog.pluginId().toStdString(), layerId.toStdString(), dialog.params().toStdString(), selectedPointIndices);
         refreshLayers();
-        autosaveProject();
     } catch (const std::exception& ex) {
         QMessageBox::critical(this, "Plugin error", ex.what());
     }
@@ -669,7 +444,6 @@ void MainWindow::editSelectedLayer() {
     if (dialog.deleteRequested()) {
         controller_.project().removeLayer(layerId.toStdString());
         refreshLayers();
-        autosaveProject();
         return;
     }
 
@@ -702,7 +476,6 @@ void MainWindow::editSelectedLayer() {
         layer->legendText = layer->name;
     }
     refreshLayers();
-    autosaveProject();
 }
 
 void MainWindow::removeSelectedLayer() {
@@ -710,7 +483,6 @@ void MainWindow::removeSelectedLayer() {
     if (layerId.isEmpty()) return;
     controller_.project().removeLayer(layerId.toStdString());
     refreshLayers();
-    autosaveProject();
 }
 
 void MainWindow::executeConsoleCommand() {
@@ -720,7 +492,6 @@ void MainWindow::executeConsoleCommand() {
     commandLine_->clear();
     canvas_->setProject(&controller_.project());
     refreshLayers();
-    autosaveProject();
 }
 
 void MainWindow::completeConsoleCommand() {
@@ -746,7 +517,6 @@ void MainWindow::onLayerItemChanged(QTreeWidgetItem* item, int) {
         layer->visible = visible;
     }
     canvas_->update();
-    autosaveProject();
 }
 
 void MainWindow::onCurrentLayerChanged(QTreeWidgetItem* current, QTreeWidgetItem*) {
@@ -799,7 +569,7 @@ void MainWindow::applyTheme(const QString& theme) {
     if (theme == "dark") {
         const QString darkStyle = QString(
             "QWidget { background: #202124; color: #e8eaed; }"
-            "QLineEdit, QTextEdit, QPlainTextEdit, QTreeWidget, QTableWidget, QComboBox, QSpinBox, QDoubleSpinBox { background: #2b2c30; color: #e8eaed; border: 1px solid #5f6368; padding: 4px; }"
+            "QLineEdit, QTextEdit, QTreeWidget, QTableWidget, QComboBox, QSpinBox, QDoubleSpinBox { background: #2b2c30; color: #e8eaed; border: 1px solid #5f6368; padding: 4px; }"
             "QMenuBar::item:selected, QMenu::item:selected { background: #3c4043; }"
             "QPushButton { background: #3c4043; border: 1px solid #5f6368; padding: 6px; }"
         ) + messageBoxSizing;
@@ -823,6 +593,6 @@ void MainWindow::applyThemeDark() { applyTheme("dark"); }
 void MainWindow::setUiScale100() { applyUiScale(100); }
 void MainWindow::setUiScale115() { applyUiScale(115); }
 void MainWindow::setUiScale130() { applyUiScale(130); }
-void MainWindow::resetView() { canvas_->resetViewToProject(); autosaveProject(); }
+void MainWindow::resetView() { canvas_->resetViewToProject(); }
 
 } // namespace plotapp::ui

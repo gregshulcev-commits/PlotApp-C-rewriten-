@@ -7,9 +7,9 @@
 class QCheckBox;
 class QDoubleSpinBox;
 class QLineEdit;
+class QPlainTextEdit;
 class QPushButton;
 class QSpinBox;
-class QPlainTextEdit;
 
 namespace plotapp::ui {
 
@@ -26,7 +26,6 @@ private slots:
     void chooseSecondaryColor();
     void requestDelete();
     void validateAndAccept();
-    void adjustLegendEditorHeight();
 
 private:
     void updateColorPreview();

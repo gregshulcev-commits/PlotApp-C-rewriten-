@@ -1,68 +1,77 @@
-TEST LOG
-========
+TEST_LOG_RU.txt
 
-Дата: 2026-05-01
+Выполненные проверки
+====================
 
-1. Проверка наличия Qt6 Widgets development headers/libraries
--------------------------------------------------------------
-Команды:
+1. Конфигурация core/test сборки
+--------------------------------
 
-pkg-config --modversion Qt6Widgets
-ls /usr/include/x86_64-linux-gnu/qt6/QtWidgets/QApplication
-
-Результат:
-
-Qt6Widgets pkg-config not found
-no_qt_headers
-
-Вывод: полноценную сборку/запуск GUI в этой среде выполнить нельзя.
-
-2. Ручная сборка core-тестов и plugin-модулей
---------------------------------------------
-Так как CMake-конфигурация в контейнере зависала на системном Python-хелпере окружения, core-тесты были собраны напрямую через c++.
-
-Собраны plugin-модули:
-- plotapp_linear_fit.so
-- plotapp_moving_average.so
-- plotapp_local_extrema.so
-- plotapp_newton_deg2.so
-- plotapp_newton_deg4.so
-- plotapp_newton_deg5.so
-- plotapp_newton_polynomial.so
-- plotapp_smooth_curve.so
-- plotapp_error_bars.so
-
-Собран и запущен:
-- /tmp/plotapp_manual/plotapp_tests
-
-Результат:
-
-All tests passed.
-
-3. Дополнительные GUI static checks
------------------------------------
 Команда:
 
-./tests/gui_static_checks.sh /mnt/data/plotapp_fixed_sources
+cmake -S . -B build_fixed -G Ninja -DPLOTAPP_BUILD_GUI=OFF -DPLOTAPP_BUILD_TESTS=ON
+
+Результат:
+Конфигурация CMake завершилась успешно.
+
+2. Конфигурация GUI-сборки
+--------------------------
+
+Команда:
+
+cmake -S . -B build_gui_check -G Ninja -DPLOTAPP_BUILD_GUI=ON -DPLOTAPP_BUILD_TESTS=OFF
+
+Результат:
+Конфигурация CMake выполнена, но GUI-цель не может быть собрана в этой среде, потому что Qt6 не найден.
+
+Проверено в build_gui_check/CMakeCache.txt:
+
+Qt6_DIR:PATH=Qt6_DIR-NOTFOUND
+PLOTAPP_BUILD_GUI:BOOL=ON
+
+3. Ручная компиляция изменённых core-файлов
+-------------------------------------------
+
+Скомпилированы:
+
+- src/importers/XlsxImporter.cpp
+- src/render/SvgRenderer.cpp
+
+Использовался стандарт C++17 и предупреждения:
+
+- Wall
+- Wextra
+- Wpedantic
+
+4. Сфокусированные регрессионные тесты
+--------------------------------------
+
+Проверенные сценарии:
+
+- открытие examples/sample_book.xlsx;
+- проверка имени листа Experiment;
+- проверка чтения 6 точек из XLSX;
+- отклонение повреждённого XLSX исключением;
+- сериализация и десериализация многострочной легенды;
+- SVG-экспорт многострочной легенды;
+- экранирование HTML/XML-символов в легенде.
+
+Команда запуска:
+
+/tmp/plotapp_manual/focused_tests
 
 Результат:
 
-GUI static checks passed.
+Focused tests passed.
 
-Проверенные GUI-контракты:
-- экспорт не рисует текст после установки high-DPI metadata;
-- экспорт масштабирует видимый canvas-снимок;
-- есть сигнал клика по легенде;
-- клик по легенде подключён к inline-редактору;
-- редактор легенды в свойствах слоя многострочный;
-- редактор легенды меняет высоту по количеству строк;
-- есть autosave cache-файл autosave.plotapp;
-- есть восстановление autosave при запуске;
-- новый проект открывается в новом окне;
-- есть A4 landscape canvas action;
-- тёмная тема использует белый foreground для canvas-текста.
+5. Обновлённые тесты в исходниках
+---------------------------------
 
-Итог:
+Файл:
 
-All tests passed.
-GUI static checks passed.
+tests/tests_main.cpp
+
+Добавлено/изменено:
+
+- test_malformed_xlsx_rejected();
+- roundtrip-проверка строки легенды `I_{raw}\nsecond line`;
+- SVG-проверка многострочной легенды и `<tspan>`.

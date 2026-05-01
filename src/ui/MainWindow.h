@@ -5,16 +5,10 @@
 
 #include <QFont>
 #include <QMainWindow>
-#include <QString>
 
-class QCloseEvent;
 class QDockWidget;
-class QEvent;
-class QGridLayout;
 class QLineEdit;
 class QTextEdit;
-class QTimer;
-class QWidget;
 class QToolBar;
 class QTreeWidget;
 class QTreeWidgetItem;
@@ -26,11 +20,7 @@ class PlotCanvasWidget;
 class MainWindow : public QMainWindow {
     Q_OBJECT
 public:
-    explicit MainWindow(QWidget* parent = nullptr, bool restoreAutosave = true);
-
-protected:
-    bool eventFilter(QObject* watched, QEvent* event) override;
-    void closeEvent(QCloseEvent* event) override;
+    explicit MainWindow(QWidget* parent = nullptr);
 
 private slots:
     void refreshLayers();
@@ -62,12 +52,6 @@ private slots:
     void setUiScale130();
     void resetView();
     void clearCurrentSelection();
-    void newProjectWindow();
-    void fitCanvasA4Landscape();
-    void fitCanvasA4Portrait();
-    void releaseCanvasAspect();
-    void editLegendInline(const QString& layerId);
-    void autosaveProject();
 
 private:
     QString selectedLayerId() const;
@@ -79,16 +63,9 @@ private:
     void configureFloatingDock(QDockWidget* dock);
     void restoreDock(QDockWidget* dock, Qt::DockWidgetArea area);
     void restorePanelsDefaultLayout();
-    void updateCanvasAspectConstraint();
-    QString autosaveFilePath() const;
-    bool restoreAutosaveIfPresent();
-    bool projectHasUserContent() const;
-    void startAutosave();
 
     plotapp::ProjectController controller_;
     plotapp::CommandDispatcher dispatcher_;
-    QWidget* canvasHost_ {nullptr};
-    QGridLayout* canvasHostLayout_ {nullptr};
     PlotCanvasWidget* canvas_ {nullptr};
     QTreeWidget* layerTree_ {nullptr};
     QTextEdit* log_ {nullptr};
@@ -96,10 +73,7 @@ private:
     QDockWidget* layerDock_ {nullptr};
     QDockWidget* consoleDock_ {nullptr};
     QToolBar* panelsToolbar_ {nullptr};
-    QToolBar* canvasToolbar_ {nullptr};
-    QTimer* autosaveTimer_ {nullptr};
     QFont baseFont_;
-    double lockedCanvasAspect_ {0.0};
 };
 
 } // namespace plotapp::ui

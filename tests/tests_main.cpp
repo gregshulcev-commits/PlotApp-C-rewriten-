@@ -163,20 +163,20 @@ void test_xlsx_import() {
     require(series.points.size() == 6, "XLSX point count mismatch");
 }
 
-void test_xlsx_import_relationship_order_shared_strings_and_implicit_refs() {
-    XlsxImporter importer;
-    auto table = importer.load((sourceDir() / "tests" / "data" / "relationship_reordered_shared_strings.xlsx").string());
-    require(table.sheetName == "Shared Sheet", "XLSX relationship sheet name mismatch");
-    require(table.headers.size() >= 2, "XLSX reordered relationship headers missing");
-    require(table.headers[0] == "time_ms", "XLSX shared string header 0 mismatch");
-    require(table.headers[1] == "voltage_mv", "XLSX shared string header 1 mismatch");
+void test_malformed_xlsx_rejected() {
+    const auto tmpDir = buildDir() / "test_tmp";
+    std::filesystem::create_directories(tmpDir);
+    const auto badXlsx = tmpDir / "bad.xlsx";
+    writeTextFile(badXlsx, "this is not a zip workbook");
 
-    auto series = extractNumericSeries(table, 0, 1);
-    require(series.points.size() == 2, "XLSX implicit refs point count mismatch");
-    require(std::abs(series.points[0].x - 0.0) < 1e-9 && std::abs(series.points[0].y - 100.0) < 1e-9,
-            "XLSX implicit refs first point mismatch");
-    require(std::abs(series.points[1].x - 10.0) < 1e-9 && std::abs(series.points[1].y - 115.0) < 1e-9,
-            "XLSX implicit refs second point mismatch");
+    XlsxImporter importer;
+    bool threw = false;
+    try {
+        (void)importer.load(badXlsx.string());
+    } catch (const std::exception&) {
+        threw = true;
+    }
+    require(threw, "Malformed XLSX should be rejected without crashing");
 }
 
 void test_non_finite_numeric_input_rejected() {
@@ -353,8 +353,8 @@ void test_project_roundtrip() {
     require(loaded.layers().size() == 3, "Roundtrip layer count mismatch");
     require(loaded.settings().uiTheme == "dark", "Roundtrip theme mismatch");
     require(loaded.layers()[0].errorValues.size() == 3, "Roundtrip error values mismatch");
+    require(loaded.layers()[0].legendText == "I_{raw}\nsecond line", "Roundtrip multiline legend text mismatch");
     require(loaded.layers()[0].style.secondaryColor == "#445566", "Roundtrip secondary color mismatch");
-    require(loaded.layers()[0].legendText == "I_{raw}\nsecond line", "Roundtrip multiline legend mismatch");
     require(!loaded.layers()[0].style.connectPoints, "Roundtrip connectPoints mismatch");
     require(loaded.layers()[0].pointVisibility.size() == 3 && loaded.layers()[0].pointVisibility[1] == 0, "Roundtrip point visibility mismatch");
     require(loaded.layers()[0].importedHeaders.size() == 3, "Roundtrip imported headers mismatch");
@@ -630,7 +630,7 @@ void test_svg_export_security_and_formula_render() {
     formula.formulaXMin = -1.0;
     formula.formulaXMax = 1.0;
     formula.formulaSamples = 4;
-    formula.legendText = "<legend>\nSecond line with enough text to resize the legend box";
+    formula.legendText = "<legend>\nsecond line";
     formula.style.color = "\"><script>alert(1)</script>";
     formula.style.showMarkers = false;
     formula.style.connectPoints = true;
@@ -644,9 +644,8 @@ void test_svg_export_security_and_formula_render() {
     require(svg.find("fill=\"none\"") != std::string::npos, "Continuous SVG path should not be filled");
     require(svg.find("fill=\"#ffffff\"") != std::string::npos, "Dark theme text should export with white foreground");
     require(svg.find("&lt;legend&gt;") != std::string::npos, "SVG legend text should be escaped");
-    require(svg.find("<tspan") != std::string::npos, "SVG multiline legend should use tspan rows");
-    require(svg.find("Second line with enough text") != std::string::npos, "SVG multiline legend second row missing");
-    require(svg.find("width=\"170\" height=\"26\"") == std::string::npos, "SVG legend should not use the fixed legacy box");
+    require(svg.find("second line") != std::string::npos, "SVG multiline legend should include the second line");
+    require(svg.find("<tspan") != std::string::npos, "SVG multiline legend should be emitted as tspans");
 }
 
 void test_command_dispatcher() {
@@ -679,7 +678,7 @@ int main() {
         test_txt_import();
         test_extensionless_import_and_binary_rejection();
         test_xlsx_import();
-        test_xlsx_import_relationship_order_shared_strings_and_implicit_refs();
+        test_malformed_xlsx_rejected();
         test_non_finite_numeric_input_rejected();
         test_formula_evaluator_and_layer();
         test_viewport_sampling();

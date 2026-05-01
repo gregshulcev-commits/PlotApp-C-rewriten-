@@ -123,6 +123,10 @@ if(PLOTAPP_BUILD_TESTS)
     )
     add_test(NAME plotapp_tests COMMAND plotapp_tests)
     set_tests_properties(plotapp_tests PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/gui_static_checks.sh")
+        add_test(NAME plotapp_gui_static_checks
+            COMMAND bash "${CMAKE_CURRENT_SOURCE_DIR}/tests/gui_static_checks.sh" "${CMAKE_CURRENT_SOURCE_DIR}")
+    endif()
 endif()
 
 install(TARGETS plotapp_core plotapp-cli

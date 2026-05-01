@@ -17,8 +17,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cctype>
-#include <cstdint>
-#include <stdexcept>
 
 namespace plotapp::ui {
 namespace {
@@ -28,15 +26,21 @@ double clampValue(double value, double minValue, double maxValue) {
 }
 
 QString htmlEscape(const std::string& text) {
-    const QString input = QString::fromUtf8(text.data(), static_cast<qsizetype>(text.size()));
+    const QString decoded = QString::fromUtf8(text.data(), static_cast<int>(text.size()));
     QString out;
-    out.reserve(input.size());
-    for (const QChar ch : input) {
-        if (ch == QLatin1Char('&')) out += QStringLiteral("&amp;");
-        else if (ch == QLatin1Char('<')) out += QStringLiteral("&lt;");
-        else if (ch == QLatin1Char('>')) out += QStringLiteral("&gt;");
-        else if (ch == QLatin1Char('"')) out += QStringLiteral("&quot;");
-        else out += ch;
+    out.reserve(decoded.size());
+    for (const QChar ch : decoded) {
+        if (ch == QChar('&')) out += "&amp;";
+        else if (ch == QChar('<')) out += "&lt;";
+        else if (ch == QChar('>')) out += "&gt;";
+        else if (ch == QChar('"')) out += "&quot;";
+        else if (ch == QChar('\'')) out += "&#39;";
+        else if (ch == QChar('\n')) out += "<br/>";
+        else if (ch == QChar('\r')) {
+            // Ignore CR from CRLF input; LF will create the line break.
+        } else {
+            out += ch;
+        }
     }
     return out;
 }
@@ -60,30 +64,16 @@ QString latexLikeToHtml(const std::string& input) {
         return {};
     };
 
-    const auto isSpecial = [](char c) {
-        return c == '\\' || c == '_' || c == '^' || c == '\r' || c == '\n';
-    };
-
-    for (std::size_t i = 0; i < input.size();) {
+    std::size_t i = 0;
+    while (i < input.size()) {
         const char c = input[i];
-        if (c == '\r') {
-            if (i + 1 < input.size() && input[i + 1] == '\n') ++i;
-            out += QStringLiteral("<br/>");
-            ++i;
-            continue;
-        }
-        if (c == '\n') {
-            out += QStringLiteral("<br/>");
-            ++i;
-            continue;
-        }
         if (c == '\\') {
             std::size_t j = i + 1;
             while (j < input.size() && std::isalpha(static_cast<unsigned char>(input[j]))) ++j;
             const auto cmd = input.substr(i + 1, j - i - 1);
             const auto repl = greek(cmd);
             if (!repl.isEmpty()) out += repl;
-            else out += htmlEscape(cmd.empty() ? std::string("\\") : cmd);
+            else out += htmlEscape(input.substr(i, std::max<std::size_t>(1, j - i)));
             i = j;
             continue;
         }
@@ -99,46 +89,26 @@ QString latexLikeToHtml(const std::string& input) {
                 content = htmlEscape(input.substr(i + 1, 1));
                 i += 2;
             }
-            out += isSub ? (QStringLiteral("<sub>") + content + QStringLiteral("</sub>"))
-                         : (QStringLiteral("<sup>") + content + QStringLiteral("</sup>"));
+            out += isSub ? (QString("<sub>") + content + "</sub>") : (QString("<sup>") + content + "</sup>");
             continue;
         }
 
-        std::size_t j = i;
-        while (j < input.size() && !isSpecial(input[j])) ++j;
-        out += htmlEscape(input.substr(i, j - i));
-        i = j;
+        const std::size_t runStart = i;
+        while (i < input.size() && input[i] != '\\' && input[i] != '_' && input[i] != '^') ++i;
+        out += htmlEscape(input.substr(runStart, i - runStart));
     }
     return out;
 }
 
-void configureTextDocument(QTextDocument& doc, const QFont& font, const QString& html, const QColor* color = nullptr) {
-    doc.setDefaultFont(font);
-    QTextOption option = doc.defaultTextOption();
-    option.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
-    doc.setDefaultTextOption(option);
-    if (color != nullptr) {
-        doc.setDefaultStyleSheet(QString("body, p, span, sub, sup { color: %1; margin: 0; padding: 0; }").arg(color->name()));
-    } else {
-        doc.setDefaultStyleSheet(QStringLiteral("body, p, span, sub, sup { margin: 0; padding: 0; }"));
-    }
-    doc.setHtml(html);
-}
-
-QSizeF richTextSize(const QFont& font, const QString& html, double maxTextWidth) {
-    QTextDocument doc;
-    configureTextDocument(doc, font, html);
-    doc.setTextWidth(-1.0);
-    const QSizeF natural = doc.size();
-    const double boundedWidth = std::ceil(clampValue(natural.width(), 40.0, std::max(40.0, maxTextWidth)));
-    doc.setTextWidth(boundedWidth);
-    const QSizeF wrapped = doc.size();
-    return QSizeF(std::ceil(std::max(boundedWidth, wrapped.width())), std::ceil(wrapped.height()));
-}
-
 void drawRichText(QPainter& painter, const QRectF& rect, const QString& html, Qt::Alignment alignment, const QColor& color) {
     QTextDocument doc;
-    configureTextDocument(doc, painter.font(), html, &color);
+    doc.setDefaultFont(painter.font());
+    doc.setDefaultStyleSheet(QString("body, div, p, span, sub, sup { color: %1; }").arg(color.name()));
+    QTextOption option;
+    option.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
+    option.setAlignment(alignment);
+    doc.setDefaultTextOption(option);
+    doc.setHtml(QString("<div style="color:%1;">%2</div>").arg(color.name(), html));
     doc.setTextWidth(rect.width());
     QSizeF size = doc.size();
     QPointF origin = rect.topLeft();
@@ -153,22 +123,32 @@ void drawRichText(QPainter& painter, const QRectF& rect, const QString& html, Qt
     painter.restore();
 }
 
-QSize checkedExportSize(QSize requested) {
-    constexpr int kMinExportDimension = 32;
-    constexpr int kMaxExportDimension = 20000;
-    constexpr qint64 kMaxExportPixels = 100000000;
 
-    requested = requested.expandedTo(QSize(kMinExportDimension, kMinExportDimension));
-    if (requested.width() > kMaxExportDimension || requested.height() > kMaxExportDimension) {
-        throw std::runtime_error("Export image size is too large");
-    }
-    const qint64 pixels = static_cast<qint64>(requested.width()) * static_cast<qint64>(requested.height());
-    if (pixels > kMaxExportPixels) {
-        throw std::runtime_error("Export image has too many pixels; reduce width, height, or DPI");
-    }
-    return requested;
+
+QSizeF richTextSizeForWidth(const QFont& font, const QString& html, double textWidth) {
+    QTextDocument doc;
+    doc.setDefaultFont(font);
+    doc.setHtml(html);
+    doc.setTextWidth(std::max(1.0, textWidth));
+    return doc.size();
 }
 
+QSizeF naturalRichTextSize(const QFont& font, const QString& html) {
+    QTextDocument doc;
+    doc.setDefaultFont(font);
+    doc.setHtml(html);
+    doc.setTextWidth(-1);
+    const double naturalWidth = std::max(1.0, std::ceil(doc.idealWidth()));
+    doc.setTextWidth(naturalWidth);
+    return doc.size();
+}
+
+bool exportSizeIsSafe(const QSize& size) {
+    constexpr qint64 kMaxExportPixels = 64ll * 1024ll * 1024ll;
+    if (!size.isValid() || size.width() <= 0 || size.height() <= 0) return false;
+    const qint64 pixels = static_cast<qint64>(size.width()) * static_cast<qint64>(size.height());
+    return pixels > 0 && pixels <= kMaxExportPixels;
+}
 
 double niceStep(double range) {
     if (range <= 0.0) return 1.0;
@@ -218,6 +198,16 @@ PlotCanvasWidget::PlotCanvasWidget(QWidget* parent) : QWidget(parent) {
     setMouseTracking(true);
     setFocusPolicy(Qt::StrongFocus);
 }
+
+QSize PlotCanvasWidget::activeRenderSize() const {
+    if (renderSizeOverride_.isValid()) return renderSizeOverride_;
+    return size().expandedTo(QSize(32, 32));
+}
+
+QRect PlotCanvasWidget::activeRenderRect() const {
+    return QRect(QPoint(0, 0), activeRenderSize());
+}
+
 
 void PlotCanvasWidget::setProject(plotapp::Project* project) {
     project_ = project;
@@ -277,7 +267,12 @@ bool PlotCanvasWidget::exportPng(const QString& path) const {
 
 bool PlotCanvasWidget::exportPng(const QString& path, const QSize& size, int dpi) const {
     const QImage image = renderToImage(size, dpi);
-    return image.save(path, "PNG");
+    if (image.isNull()) return false;
+
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly)) return false;
+    if (!image.save(&file, "PNG")) return false;
+    return file.commit();
 }
 
 bool PlotCanvasWidget::exportSvgSnapshot(const QString& path, const QSize& size, int dpi) const {
@@ -299,44 +294,49 @@ bool PlotCanvasWidget::exportSvgSnapshot(const QString& path, const QSize& size,
 
     QSaveFile file(path);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) return false;
-    const QByteArray svgBytes = svg.toUtf8();
-    if (file.write(svgBytes) != svgBytes.size()) return false;
+    if (file.write(svg.toUtf8()) < 0) return false;
     return file.commit();
 }
 
 QImage PlotCanvasWidget::renderToImage(const QSize& size, int dpi) const {
-    const QSize sourceSize = this->size().expandedTo(QSize(32, 32));
-    const QSize targetSize = checkedExportSize(size);
-    QImage image(targetSize, QImage::Format_ARGB32_Premultiplied);
-    if (image.isNull()) {
-        throw std::runtime_error("Cannot allocate export image buffer");
-    }
-    image.fill(Qt::transparent);
-    if (dpi > 0) {
-        const double dotsPerMeter = static_cast<double>(dpi) / 0.0254;
-        image.setDotsPerMeterX(static_cast<int>(std::lround(dotsPerMeter)));
-        image.setDotsPerMeterY(static_cast<int>(std::lround(dotsPerMeter)));
-    }
+    const QSize targetSize = size.expandedTo(QSize(32, 32));
+    if (!exportSizeIsSafe(targetSize)) return {};
 
-    QPainter painter(&image);
-    if (!painter.isActive()) {
-        throw std::runtime_error("Cannot start export image painter");
-    }
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.setRenderHint(QPainter::TextAntialiasing, true);
-    painter.scale(static_cast<double>(targetSize.width()) / static_cast<double>(sourceSize.width()),
-                  static_cast<double>(targetSize.height()) / static_cast<double>(sourceSize.height()));
+    // Render the visible canvas at its logical on-screen size, then scale the
+    // complete image to the requested export page. Do not set QImage DPI before
+    // painting: Qt converts point-sized fonts through the paint device DPI, and
+    // high values such as 640 dpi make tick labels and legends explode while the
+    // layout margins stay in pixels. DPI is saved as metadata after drawing.
+    QSize logicalSize = this->size().expandedTo(QSize(32, 32));
+    if (!exportSizeIsSafe(logicalSize)) logicalSize = targetSize;
+
+    QImage logicalImage(logicalSize, QImage::Format_ARGB32_Premultiplied);
+    if (logicalImage.isNull()) return {};
+    logicalImage.fill(Qt::transparent);
 
     auto* self = const_cast<PlotCanvasWidget*>(this);
     const QSize previousOverride = self->renderSizeOverride_;
-    self->renderSizeOverride_ = sourceSize;
+    self->renderSizeOverride_ = logicalSize;
+
     try {
-        self->ensureViewInitialized();
-        self->paintCanvas(painter);
-        self->renderSizeOverride_ = previousOverride;
+        QPainter painter(&logicalImage);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        painter.setRenderHint(QPainter::TextAntialiasing, true);
+        self->paintScene(painter);
     } catch (...) {
         self->renderSizeOverride_ = previousOverride;
         throw;
+    }
+
+    self->renderSizeOverride_ = previousOverride;
+
+    QImage image = logicalSize == targetSize
+        ? logicalImage
+        : logicalImage.scaled(targetSize, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+    if (dpi > 0 && !image.isNull()) {
+        const double dotsPerMeter = static_cast<double>(dpi) / 0.0254;
+        image.setDotsPerMeterX(static_cast<int>(std::lround(dotsPerMeter)));
+        image.setDotsPerMeterY(static_cast<int>(std::lround(dotsPerMeter)));
     }
     return image;
 }
@@ -360,6 +360,7 @@ void PlotCanvasWidget::clearSelection() {
     draggingView_ = false;
     draggingLegend_ = false;
     draggedLegendLayerId_.clear();
+    pressedLegendLayerId_.clear();
     selectedLayerId_.clear();
     selectedPointIndices_.clear();
     emitPointSelectionChanged();
@@ -424,28 +425,16 @@ void PlotCanvasWidget::applySelectionRect(const QRectF& pixelRect) {
     update();
 }
 
-QSize PlotCanvasWidget::effectiveSize() const {
-    return renderSizeOverride_.isValid() ? renderSizeOverride_ : size();
-}
-
-int PlotCanvasWidget::canvasWidth() const {
-    return effectiveSize().width();
-}
-
-int PlotCanvasWidget::canvasHeight() const {
-    return effectiveSize().height();
-}
-
 QRectF PlotCanvasWidget::plotRect() const {
     constexpr double left = 126.0;
     constexpr double top = 48.0;
     constexpr double right = 24.0;
     constexpr double bottom = 88.0;
+    const QSize canvasSize = activeRenderSize();
     return QRectF(left, top,
-                  std::max(120.0, static_cast<double>(canvasWidth()) - left - right),
-                  std::max(120.0, static_cast<double>(canvasHeight()) - top - bottom));
+                  std::max(120.0, static_cast<double>(canvasSize.width()) - left - right),
+                  std::max(120.0, static_cast<double>(canvasSize.height()) - top - bottom));
 }
-
 
 QRectF PlotCanvasWidget::titleRect() const {
     const QRectF pr = plotRect();
@@ -554,32 +543,39 @@ void PlotCanvasWidget::zoomAt(const QPointF& pixel, double factorX, double facto
 }
 
 QRectF PlotCanvasWidget::legendRectForLayer(const plotapp::Layer& layer) const {
-    const QRectF plotArea = plotRect().adjusted(4.0, 4.0, -4.0, -4.0);
+    const QRectF pr = plotRect();
     const std::string legendText = layer.legendText.empty() ? layer.name : layer.legendText;
     const QString html = latexLikeToHtml(legendText);
+    const double maxLegendWidth = std::max(140.0, pr.width() - 8.0);
+    const double swatchAndLeftPadding = 34.0;
+    const double rightPadding = 10.0;
+    const double verticalPadding = 8.0;
+    const double maxTextWidth = std::max(80.0, maxLegendWidth - swatchAndLeftPadding - rightPadding);
+    const QSizeF naturalSize = naturalRichTextSize(font(), html);
+    const double textWidth = clampValue(std::ceil(naturalSize.width()), 80.0, maxTextWidth);
+    const QSizeF wrappedSize = richTextSizeForWidth(font(), html, textWidth);
+    const double width = std::min(maxLegendWidth,
+                                  std::max(190.0, swatchAndLeftPadding + rightPadding + std::ceil(wrappedSize.width())));
+    const double maxLegendHeight = std::max(34.0, pr.height() - 8.0);
+    const double height = std::min(maxLegendHeight,
+                                   std::max(34.0, verticalPadding + std::ceil(wrappedSize.height())));
 
-    const double maxTextWidth = std::max(64.0, plotArea.width() * 0.70 - 42.0);
-    const QSizeF textSize = richTextSize(font(), html, maxTextWidth);
-    const double boxWidth = std::ceil(std::min(plotArea.width(), std::max(96.0, textSize.width() + 42.0)));
-    const double boxHeight = std::ceil(std::min(plotArea.height(), std::max(34.0, textSize.height() + 12.0)));
-
-    double x = plotArea.left() + layer.legendAnchorX * plotArea.width();
-    double y = plotArea.top() + layer.legendAnchorY * plotArea.height();
-    x = boxWidth >= plotArea.width() ? plotArea.left() : clampValue(x, plotArea.left(), plotArea.right() - boxWidth);
-    y = boxHeight >= plotArea.height() ? plotArea.top() : clampValue(y, plotArea.top(), plotArea.bottom() - boxHeight);
-    return QRectF(x, y, boxWidth, boxHeight);
+    const double x = pr.left() + layer.legendAnchorX * pr.width();
+    const double y = pr.top() + layer.legendAnchorY * pr.height();
+    return QRectF(x, y, width, height);
 }
-
 
 void PlotCanvasWidget::paintEvent(QPaintEvent*) {
-    ensureViewInitialized();
     QPainter painter(this);
-    paintCanvas(painter);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setRenderHint(QPainter::TextAntialiasing, true);
+    paintScene(painter);
 }
 
-void PlotCanvasWidget::paintCanvas(QPainter& painter) {
+void PlotCanvasWidget::paintScene(QPainter& painter) {
+    ensureViewInitialized();
     legendRects_.clear();
-    painter.setRenderHint(QPainter::Antialiasing, true);
+
     const bool dark = project_ != nullptr
         ? project_->settings().uiTheme == "dark"
         : palette().window().color().lightness() < 128;
@@ -588,7 +584,7 @@ void PlotCanvasWidget::paintCanvas(QPainter& painter) {
     const QColor grid = dark ? QColor("#3c4043") : QColor("#d9d9d9");
     const QColor plotBg = dark ? QColor("#111315") : QColor("#ffffff");
     const QColor selectionColor = palette().highlight().color().isValid() ? palette().highlight().color() : QColor("#4285f4");
-    painter.fillRect(QRectF(QPointF(0.0, 0.0), QSizeF(effectiveSize())), bg);
+    painter.fillRect(activeRenderRect(), bg);
 
     const QRectF pr = plotRect();
     const QRectF tr = titleRect();
@@ -794,24 +790,26 @@ void PlotCanvasWidget::paintCanvas(QPainter& painter) {
     for (const auto& layer : project_->layers()) {
         if (!layer.visible || !layer.legendVisible) continue;
         QRectF box = legendRectForLayer(layer);
+        const QRectF allowed = pr.adjusted(4, 4, -4, -4);
+        box.moveLeft(clampValue(box.left(), allowed.left(), std::max(allowed.left(), allowed.right() - box.width())));
+        box.moveTop(clampValue(box.top(), allowed.top(), std::max(allowed.top(), allowed.bottom() - box.height())));
         legendRects_[layer.id] = box;
         painter.setBrush(QColor(dark ? "#2b2c30" : "#ffffff"));
         painter.setPen(QPen(fg, 1));
         painter.drawRoundedRect(box, 6, 6);
         const QColor primaryColor = safeColor(layer.style.color);
         const QColor secondaryColor = safeColor(layer.style.secondaryColor, primaryColor);
-        const double swatchY = box.top() + std::max(6.0, (box.height() - 10.0) / 2.0);
+        const double swatchY = box.top() + box.height() / 2.0 - 5.0;
         if (layerSupportsPointRoles(layer) && !layer.pointRoles.empty() && secondaryColor != primaryColor) {
             painter.fillRect(QRectF(box.left() + 8.0, swatchY, 8.0, 10.0), primaryColor);
             painter.fillRect(QRectF(box.left() + 18.0, swatchY, 8.0, 10.0), secondaryColor);
         } else {
             painter.fillRect(QRectF(box.left() + 8.0, swatchY, 18.0, 10.0), primaryColor);
         }
-        drawRichText(painter, box.adjusted(32, 6, -8, -6),
+        drawRichText(painter, box.adjusted(32, 4, -6, -4),
                      latexLikeToHtml(layer.legendText.empty() ? layer.name : layer.legendText),
                      Qt::AlignLeft | Qt::AlignVCenter, fg);
     }
-
 }
 
 void PlotCanvasWidget::wheelEvent(QWheelEvent* event) {
@@ -844,14 +842,17 @@ void PlotCanvasWidget::mousePressEvent(QMouseEvent* event) {
         draggingView_ = false;
         draggingLegend_ = false;
         draggedLegendLayerId_.clear();
+        pressedLegendLayerId_.clear();
         update();
         return;
     }
 
+    pressedLegendLayerId_.clear();
     for (const auto& [layerId, rect] : legendRects_) {
         if (rect.contains(event->pos())) {
             draggingLegend_ = true;
             draggedLegendLayerId_ = layerId;
+            pressedLegendLayerId_ = layerId;
             legendDragOffset_ = event->pos() - rect.topLeft();
             return;
         }
@@ -868,11 +869,11 @@ void PlotCanvasWidget::mouseMoveEvent(QMouseEvent* event) {
     if (draggingLegend_ && project_) {
         auto* layer = project_->findLayer(draggedLegendLayerId_);
         if (!layer) return;
-        const QRectF pr = plotRect().adjusted(4.0, 4.0, -4.0, -4.0);
-        const QRectF currentBox = legendRectForLayer(*layer);
+        const QRectF pr = plotRect();
         const QPointF topLeft = event->pos() - legendDragOffset_;
-        const double maxAnchorX = std::max(0.0, (pr.width() - currentBox.width()) / pr.width());
-        const double maxAnchorY = std::max(0.0, (pr.height() - currentBox.height()) / pr.height());
+        const QRectF legendBox = legendRectForLayer(*layer);
+        const double maxAnchorX = std::max(0.0, 1.0 - legendBox.width() / std::max(1.0, pr.width()));
+        const double maxAnchorY = std::max(0.0, 1.0 - legendBox.height() / std::max(1.0, pr.height()));
         layer->legendAnchorX = clampValue((topLeft.x() - pr.left()) / pr.width(), 0.0, maxAnchorX);
         layer->legendAnchorY = clampValue((topLeft.y() - pr.top()) / pr.height(), 0.0, maxAnchorY);
         update();
@@ -905,10 +906,16 @@ void PlotCanvasWidget::mouseReleaseEvent(QMouseEvent* event) {
     const bool clicked = (event->pos() - pressMousePos_).manhattanLength() < 4;
     const bool wasDraggingView = draggingView_;
     const bool wasDraggingLegend = draggingLegend_;
+    const std::string clickedLegendLayerId = pressedLegendLayerId_;
     draggingView_ = false;
     draggingLegend_ = false;
     draggedLegendLayerId_.clear();
-    if (!clicked || wasDraggingView || wasDraggingLegend) return;
+    pressedLegendLayerId_.clear();
+    if (!clicked || wasDraggingView) return;
+    if (wasDraggingLegend) {
+        if (!clickedLegendLayerId.empty()) emit legendClicked(QString::fromStdString(clickedLegendLayerId));
+        return;
+    }
     if (titleRect().contains(event->pos())) emit titleClicked();
     else if (xLabelRect().contains(event->pos())) emit xLabelClicked();
     else if (yLabelRect().contains(event->pos())) emit yLabelClicked();

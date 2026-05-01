@@ -4,6 +4,7 @@
 
 #include <QImage>
 #include <QKeyEvent>
+#include <QRect>
 #include <QPoint>
 #include <QPointF>
 #include <QRectF>
@@ -47,6 +48,7 @@ signals:
     void titleClicked();
     void xLabelClicked();
     void yLabelClicked();
+    void legendClicked(const QString& layerId);
     void pointSelectionChanged(const QString& layerId, int selectedCount, int totalCount, bool wholeLayer);
 
 protected:
@@ -65,9 +67,9 @@ private:
         double maxY {1.0};
     };
 
-    QSize effectiveSize() const;
-    int canvasWidth() const;
-    int canvasHeight() const;
+    QSize activeRenderSize() const;
+    QRect activeRenderRect() const;
+    void paintScene(QPainter& painter);
     QRectF plotRect() const;
     QRectF titleRect() const;
     QRectF yLabelRect() const;
@@ -85,7 +87,6 @@ private:
     std::vector<std::size_t> fullSelectionForLayer(const plotapp::Layer& layer) const;
     void emitPointSelectionChanged();
     void applySelectionRect(const QRectF& pixelRect);
-    void paintCanvas(QPainter& painter);
 
     plotapp::Project* project_ {nullptr};
     mutable QSize renderSizeOverride_;
@@ -102,6 +103,7 @@ private:
     QPoint selectionStartPos_;
     QPoint selectionCurrentPos_;
     std::string draggedLegendLayerId_;
+    std::string pressedLegendLayerId_;
     QPointF legendDragOffset_;
     std::string selectedLayerId_;
     std::vector<std::size_t> selectedPointIndices_;

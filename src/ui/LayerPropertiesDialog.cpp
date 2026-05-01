@@ -8,15 +8,16 @@
 #include <QColorDialog>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
+#include <QFontMetrics>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLineEdit>
 #include <QMessageBox>
-#include <QPlainTextEdit>
 #include <QPushButton>
-#include <QSizePolicy>
+#include <QPlainTextEdit>
 #include <QSpinBox>
+#include <QTextDocument>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -78,11 +79,12 @@ LayerPropertiesDialog::LayerPropertiesDialog(plotapp::Layer layer, QWidget* pare
     auto* legendForm = new QFormLayout(legendBox);
     legendVisibleCheck_ = new QCheckBox(this);
     legendVisibleCheck_->setChecked(layer_.legendVisible);
-    legendTextEdit_ = new QPlainTextEdit(QString::fromStdString(layer_.legendText.empty() ? layer_.name : layer_.legendText), this);
-    legendTextEdit_->setPlaceholderText("Legend text. Press Enter to insert a new line.");
-    legendTextEdit_->setMinimumHeight(90);
+    legendTextEdit_ = new QPlainTextEdit(this);
+    legendTextEdit_->setPlainText(QString::fromStdString(layer_.legendText.empty() ? layer_.name : layer_.legendText));
     legendTextEdit_->setTabChangesFocus(true);
-    legendTextEdit_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    legendTextEdit_->setLineWrapMode(QPlainTextEdit::WidgetWidth);
+    legendTextEdit_->setPlaceholderText("Legend text. Press Enter for a new line.");
+    connect(legendTextEdit_, &QPlainTextEdit::textChanged, this, &LayerPropertiesDialog::adjustLegendEditorHeight);
     legendXSpin_ = new QDoubleSpinBox(this);
     legendYSpin_ = new QDoubleSpinBox(this);
     for (auto* spin : {legendXSpin_, legendYSpin_}) {
@@ -125,6 +127,18 @@ LayerPropertiesDialog::LayerPropertiesDialog(plotapp::Layer layer, QWidget* pare
     connect(deleteButton, &QPushButton::clicked, this, &LayerPropertiesDialog::requestDelete);
     layout->addWidget(buttons);
     updateColorPreview();
+    adjustLegendEditorHeight();
+}
+
+
+void LayerPropertiesDialog::adjustLegendEditorHeight() {
+    if (legendTextEdit_ == nullptr) return;
+    const int visibleLines = std::clamp(legendTextEdit_->document()->blockCount(), 3, 12);
+    const QFontMetrics metrics(legendTextEdit_->font());
+    const int frame = legendTextEdit_->frameWidth() * 2;
+    const int targetHeight = visibleLines * metrics.lineSpacing() + frame + 18;
+    legendTextEdit_->setFixedHeight(targetHeight);
+    adjustSize();
 }
 
 void LayerPropertiesDialog::chooseColor() {

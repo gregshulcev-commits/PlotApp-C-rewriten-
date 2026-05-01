@@ -16,8 +16,6 @@
 #include <QSpinBox>
 #include <QVBoxLayout>
 
-#include <exception>
-
 namespace plotapp::ui {
 namespace {
 
@@ -195,8 +193,14 @@ QString ExportDialog::presetDescription() const {
 
 void ExportDialog::updatePreview() {
     const QSize targetSize = exportSize();
-    summaryLabel_->setText(QString("Export visible canvas: %1. %2")
-        .arg(sizeLabel(targetSize), presetDescription()));
+    QString summary = QString("Export visible canvas: %1. %2")
+        .arg(sizeLabel(targetSize), presetDescription());
+    constexpr long long kMaxExportPixels = 64ll * 1024ll * 1024ll;
+    const long long targetPixels = static_cast<long long>(targetSize.width()) * static_cast<long long>(targetSize.height());
+    if (targetPixels > kMaxExportPixels) {
+        summary += QString("\nSelected size is too large and will be rejected during export; reduce width or height.");
+    }
+    summaryLabel_->setText(summary);
 
     if (format() == FileFormat::Svg) {
         previewHintLabel_->setText("SVG export keeps the current visible canvas composition inside an SVG page. The preview shows the exact exported page contents.");
@@ -216,14 +220,7 @@ void ExportDialog::updatePreview() {
         previewSize = previewSize.expandedTo(QSize(64, 64));
     }
 
-    QImage previewImage;
-    try {
-        previewImage = canvas_->renderToImage(previewSize);
-    } catch (const std::exception& ex) {
-        previewLabel_->setText(QString("Preview is unavailable: %1").arg(ex.what()));
-        previewLabel_->setPixmap(QPixmap());
-        return;
-    }
+    const QImage previewImage = canvas_->renderToImage(previewSize);
     if (previewImage.isNull()) {
         previewLabel_->setText("Preview is unavailable.");
         previewLabel_->setPixmap(QPixmap());

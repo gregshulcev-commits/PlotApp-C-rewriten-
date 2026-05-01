@@ -3,6 +3,7 @@
 #include "plotapp/LayerSampler.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <fstream>
 #include <sstream>
@@ -140,6 +141,71 @@ std::string buildPathData(const std::vector<Point>& points, const Bounds& bounds
     return path.str();
 }
 
+struct LegendLayout {
+    double x {0.0};
+    double y {0.0};
+    double width {96.0};
+    double height {26.0};
+    std::vector<std::string> lines;
+};
+
+std::vector<std::string> splitLegendLines(const std::string& text) {
+    std::vector<std::string> lines;
+    std::string line;
+    for (std::size_t i = 0; i < text.size(); ++i) {
+        const char c = text[i];
+        if (c == '\r') {
+            if (i + 1 < text.size() && text[i + 1] == '\n') ++i;
+            lines.push_back(line);
+            line.clear();
+        } else if (c == '\n') {
+            lines.push_back(line);
+            line.clear();
+        } else {
+            line.push_back(c);
+        }
+    }
+    lines.push_back(line);
+    return lines;
+}
+
+std::size_t utf8VisualColumns(const std::string& line) {
+    std::size_t columns = 0;
+    for (unsigned char c : line) {
+        if ((c & 0xC0u) != 0x80u) ++columns;
+    }
+    return columns;
+}
+
+LegendLayout legendLayoutForLayer(const Layer& layer, double plotX, double plotY, double plotWidth, double plotHeight) {
+    LegendLayout layout;
+    layout.lines = splitLegendLines(layer.legendText.empty() ? layer.name : layer.legendText);
+    if (layout.lines.empty()) layout.lines.push_back(std::string{});
+
+    std::size_t maxColumns = 1;
+    for (const auto& line : layout.lines) maxColumns = std::max(maxColumns, utf8VisualColumns(line));
+
+    constexpr double swatchAndGap = 34.0;
+    constexpr double horizontalPadding = 16.0;
+    constexpr double lineHeight = 17.0;
+    constexpr double verticalPadding = 12.0;
+    layout.width = std::max(96.0, swatchAndGap + horizontalPadding + static_cast<double>(maxColumns) * 7.5);
+    layout.height = std::max(26.0, verticalPadding + lineHeight * static_cast<double>(layout.lines.size()));
+
+    const double safePlotWidth = std::max(1.0, plotWidth);
+    const double safePlotHeight = std::max(1.0, plotHeight);
+    layout.width = std::min(layout.width, std::max(1.0, safePlotWidth - 8.0));
+    layout.height = std::min(layout.height, std::max(1.0, safePlotHeight - 8.0));
+
+    const double requestedX = plotX + std::clamp(layer.legendAnchorX, 0.0, 1.0) * safePlotWidth;
+    const double requestedY = plotY + std::clamp(layer.legendAnchorY, 0.0, 1.0) * safePlotHeight;
+    const double maxX = plotX + safePlotWidth - layout.width;
+    const double maxY = plotY + safePlotHeight - layout.height;
+    layout.x = maxX >= plotX ? std::clamp(requestedX, plotX, maxX) : plotX;
+    layout.y = maxY >= plotY ? std::clamp(requestedY, plotY, maxY) : plotY;
+    return layout;
+}
+
 std::string roleColorFor(const Layer& layer, PointRole role) {
     if (role == PointRole::Maximum) return safeColor(layer.style.secondaryColor, safeColor(layer.style.color));
     return safeColor(layer.style.color);
@@ -159,7 +225,7 @@ std::string SvgRenderer::renderToString(const Project& project, int width, int h
     const auto bounds = computeBounds(project);
     const bool dark = project.settings().uiTheme == "dark";
     const std::string windowColor = dark ? "#202124" : "white";
-    const std::string foreground = dark ? "#e8eaed" : "black";
+    const std::string foreground = dark ? "#ffffff" : "#000000";
     const std::string plotBackground = dark ? "#111315" : "white";
     const std::string gridColor = dark ? "#3c4043" : "#e6e6e6";
     const std::string legendBg = dark ? "#2b2c30" : "white";
@@ -226,18 +292,22 @@ std::string SvgRenderer::renderToString(const Project& project, int width, int h
 
     for (const auto* layer : project.visibleLayers()) {
         if (!layer->legendVisible) continue;
-        const double legendX = plotX + layer->legendAnchorX * plotWidth;
-        const double legendY = plotY + layer->legendAnchorY * plotHeight;
+        const LegendLayout legend = legendLayoutForLayer(*layer, plotX + 4.0, plotY + 4.0, plotWidth - 8.0, plotHeight - 8.0);
         const auto primaryColor = safeColor(layer->style.color);
         const auto secondaryColor = safeColor(layer->style.secondaryColor, primaryColor);
-        out << R"(<rect x=")" << legendX << R"(" y=")" << legendY << R"(" width="170" height="26" rx="4" ry="4" fill=")" << legendBg << R"(" stroke=")" << foreground << R"("/>)";
+        out << R"(<rect x=")" << legend.x << R"(" y=")" << legend.y << R"(" width=")" << legend.width << R"(" height=")" << legend.height << R"(" rx="4" ry="4" fill=")" << legendBg << R"(" stroke=")" << foreground << R"("/>)";
         if (layerSupportsPointRoles(*layer) && !layer->pointRoles.empty() && secondaryColor != primaryColor) {
-            out << R"(<rect x=")" << (legendX + 8) << R"(" y=")" << (legendY + 8) << R"(" width="8" height="10" fill=")" << primaryColor << R"("/>)";
-            out << R"(<rect x=")" << (legendX + 18) << R"(" y=")" << (legendY + 8) << R"(" width="8" height="10" fill=")" << secondaryColor << R"("/>)";
+            out << R"(<rect x=")" << (legend.x + 8) << R"(" y=")" << (legend.y + 8) << R"(" width="8" height="10" fill=")" << primaryColor << R"("/>)";
+            out << R"(<rect x=")" << (legend.x + 18) << R"(" y=")" << (legend.y + 8) << R"(" width="8" height="10" fill=")" << secondaryColor << R"("/>)";
         } else {
-            out << R"(<rect x=")" << (legendX + 8) << R"(" y=")" << (legendY + 8) << R"(" width="18" height="10" fill=")" << primaryColor << R"("/>)";
+            out << R"(<rect x=")" << (legend.x + 8) << R"(" y=")" << (legend.y + 8) << R"(" width="18" height="10" fill=")" << primaryColor << R"("/>)";
         }
-        out << R"(<text x=")" << (legendX + 34) << R"(" y=")" << (legendY + 18) << R"(" font-size="14" font-family="sans-serif" fill=")" << foreground << R"(">)" << xmlEscape(layer->legendText.empty() ? layer->name : layer->legendText) << R"(</text>)";
+        out << "<text x=\"" << (legend.x + 34) << "\" y=\"" << (legend.y + 18) << "\" font-size=\"14\" font-family=\"sans-serif\" fill=\"" << foreground << "\">";
+        for (std::size_t i = 0; i < legend.lines.size(); ++i) {
+            out << "<tspan x=\"" << (legend.x + 34) << "\" dy=\"" << (i == 0 ? 0 : 17) << "\">"
+                << xmlEscape(legend.lines[i]) << "</tspan>";
+        }
+        out << R"(</text>)";
     }
 
     out << "</svg>";

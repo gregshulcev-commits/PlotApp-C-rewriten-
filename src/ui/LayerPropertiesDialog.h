@@ -7,6 +7,7 @@
 class QCheckBox;
 class QDoubleSpinBox;
 class QLineEdit;
+class QPlainTextEdit;
 class QPushButton;
 class QSpinBox;
 
@@ -41,7 +42,7 @@ private:
     QCheckBox* markersCheck_ {nullptr};
     QCheckBox* connectPointsCheck_ {nullptr};
     QCheckBox* legendVisibleCheck_ {nullptr};
-    QLineEdit* legendTextEdit_ {nullptr};
+    QPlainTextEdit* legendTextEdit_ {nullptr};
     QDoubleSpinBox* legendXSpin_ {nullptr};
     QDoubleSpinBox* legendYSpin_ {nullptr};
     QLineEdit* formulaEdit_ {nullptr};

@@ -163,6 +163,22 @@ void test_xlsx_import() {
     require(series.points.size() == 6, "XLSX point count mismatch");
 }
 
+void test_malformed_xlsx_rejected() {
+    const auto tmpDir = buildDir() / "test_tmp";
+    std::filesystem::create_directories(tmpDir);
+    const auto badXlsx = tmpDir / "bad.xlsx";
+    writeTextFile(badXlsx, "this is not a zip workbook");
+
+    XlsxImporter importer;
+    bool threw = false;
+    try {
+        (void)importer.load(badXlsx.string());
+    } catch (const std::exception&) {
+        threw = true;
+    }
+    require(threw, "Malformed XLSX should be rejected without crashing");
+}
+
 void test_non_finite_numeric_input_rejected() {
     const auto tmpDir = buildDir() / "test_tmp";
     const auto csvPath = tmpDir / "non_finite_only.csv";
@@ -288,7 +304,7 @@ void test_project_roundtrip() {
 
     auto& raw = project.createLayer("raw");
     raw.points = {{0, 1}, {1, 3}, {2, 5}};
-    raw.legendText = "I_{raw}";
+    raw.legendText = "I_{raw}\nsecond line";
     raw.errorValues = {0.2, 0.3, 0.4};
     raw.style.color = "#112233";
     raw.style.secondaryColor = "#445566";
@@ -337,6 +353,7 @@ void test_project_roundtrip() {
     require(loaded.layers().size() == 3, "Roundtrip layer count mismatch");
     require(loaded.settings().uiTheme == "dark", "Roundtrip theme mismatch");
     require(loaded.layers()[0].errorValues.size() == 3, "Roundtrip error values mismatch");
+    require(loaded.layers()[0].legendText == "I_{raw}\nsecond line", "Roundtrip multiline legend text mismatch");
     require(loaded.layers()[0].style.secondaryColor == "#445566", "Roundtrip secondary color mismatch");
     require(!loaded.layers()[0].style.connectPoints, "Roundtrip connectPoints mismatch");
     require(loaded.layers()[0].pointVisibility.size() == 3 && loaded.layers()[0].pointVisibility[1] == 0, "Roundtrip point visibility mismatch");
@@ -613,7 +630,7 @@ void test_svg_export_security_and_formula_render() {
     formula.formulaXMin = -1.0;
     formula.formulaXMax = 1.0;
     formula.formulaSamples = 4;
-    formula.legendText = "<legend>";
+    formula.legendText = "<legend>\nsecond line";
     formula.style.color = "\"><script>alert(1)</script>";
     formula.style.showMarkers = false;
     formula.style.connectPoints = true;
@@ -625,7 +642,10 @@ void test_svg_export_security_and_formula_render() {
     require(svg.find("#1f77b4") != std::string::npos, "Unsafe SVG color should fall back to default");
     require(svg.find("<path") != std::string::npos, "Formula layer should render as an SVG path");
     require(svg.find("fill=\"none\"") != std::string::npos, "Continuous SVG path should not be filled");
-    require(svg.find("fill=\"#e8eaed\"") != std::string::npos, "Dark theme text should export with light foreground");
+    require(svg.find("fill=\"#ffffff\"") != std::string::npos, "Dark theme text should export with white foreground");
+    require(svg.find("&lt;legend&gt;") != std::string::npos, "SVG legend text should be escaped");
+    require(svg.find("second line") != std::string::npos, "SVG multiline legend should include the second line");
+    require(svg.find("<tspan") != std::string::npos, "SVG multiline legend should be emitted as tspans");
 }
 
 void test_command_dispatcher() {
@@ -658,6 +678,7 @@ int main() {
         test_txt_import();
         test_extensionless_import_and_binary_rejection();
         test_xlsx_import();
+        test_malformed_xlsx_rejected();
         test_non_finite_numeric_input_rejected();
         test_formula_evaluator_and_layer();
         test_viewport_sampling();

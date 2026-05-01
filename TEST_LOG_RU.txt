@@ -1,0 +1,77 @@
+TEST_LOG_RU.txt
+
+Выполненные проверки
+====================
+
+1. Конфигурация core/test сборки
+--------------------------------
+
+Команда:
+
+cmake -S . -B build_fixed -G Ninja -DPLOTAPP_BUILD_GUI=OFF -DPLOTAPP_BUILD_TESTS=ON
+
+Результат:
+Конфигурация CMake завершилась успешно.
+
+2. Конфигурация GUI-сборки
+--------------------------
+
+Команда:
+
+cmake -S . -B build_gui_check -G Ninja -DPLOTAPP_BUILD_GUI=ON -DPLOTAPP_BUILD_TESTS=OFF
+
+Результат:
+Конфигурация CMake выполнена, но GUI-цель не может быть собрана в этой среде, потому что Qt6 не найден.
+
+Проверено в build_gui_check/CMakeCache.txt:
+
+Qt6_DIR:PATH=Qt6_DIR-NOTFOUND
+PLOTAPP_BUILD_GUI:BOOL=ON
+
+3. Ручная компиляция изменённых core-файлов
+-------------------------------------------
+
+Скомпилированы:
+
+- src/importers/XlsxImporter.cpp
+- src/render/SvgRenderer.cpp
+
+Использовался стандарт C++17 и предупреждения:
+
+- Wall
+- Wextra
+- Wpedantic
+
+4. Сфокусированные регрессионные тесты
+--------------------------------------
+
+Проверенные сценарии:
+
+- открытие examples/sample_book.xlsx;
+- проверка имени листа Experiment;
+- проверка чтения 6 точек из XLSX;
+- отклонение повреждённого XLSX исключением;
+- сериализация и десериализация многострочной легенды;
+- SVG-экспорт многострочной легенды;
+- экранирование HTML/XML-символов в легенде.
+
+Команда запуска:
+
+/tmp/plotapp_manual/focused_tests
+
+Результат:
+
+Focused tests passed.
+
+5. Обновлённые тесты в исходниках
+---------------------------------
+
+Файл:
+
+tests/tests_main.cpp
+
+Добавлено/изменено:
+
+- test_malformed_xlsx_rejected();
+- roundtrip-проверка строки легенды `I_{raw}\nsecond line`;
+- SVG-проверка многострочной легенды и `<tspan>`.

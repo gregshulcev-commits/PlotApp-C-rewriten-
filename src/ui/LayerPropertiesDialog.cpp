@@ -13,7 +13,9 @@
 #include <QHBoxLayout>
 #include <QLineEdit>
 #include <QMessageBox>
+#include <QPlainTextEdit>
 #include <QPushButton>
+#include <QSizePolicy>
 #include <QSpinBox>
 #include <QVBoxLayout>
 
@@ -76,7 +78,11 @@ LayerPropertiesDialog::LayerPropertiesDialog(plotapp::Layer layer, QWidget* pare
     auto* legendForm = new QFormLayout(legendBox);
     legendVisibleCheck_ = new QCheckBox(this);
     legendVisibleCheck_->setChecked(layer_.legendVisible);
-    legendTextEdit_ = new QLineEdit(QString::fromStdString(layer_.legendText.empty() ? layer_.name : layer_.legendText), this);
+    legendTextEdit_ = new QPlainTextEdit(QString::fromStdString(layer_.legendText.empty() ? layer_.name : layer_.legendText), this);
+    legendTextEdit_->setPlaceholderText("Legend text. Press Enter to insert a new line.");
+    legendTextEdit_->setMinimumHeight(90);
+    legendTextEdit_->setTabChangesFocus(true);
+    legendTextEdit_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     legendXSpin_ = new QDoubleSpinBox(this);
     legendYSpin_ = new QDoubleSpinBox(this);
     for (auto* spin : {legendXSpin_, legendYSpin_}) {
@@ -184,7 +190,7 @@ plotapp::Layer LayerPropertiesDialog::result() const {
     copy.style.showMarkers = markersCheck_->isChecked();
     copy.style.connectPoints = connectPointsCheck_->isChecked();
     copy.legendVisible = legendVisibleCheck_->isChecked();
-    copy.legendText = legendTextEdit_->text().toStdString();
+    copy.legendText = legendTextEdit_->toPlainText().toStdString();
     copy.legendAnchorX = legendXSpin_->value();
     copy.legendAnchorY = legendYSpin_->value();
     copy.formulaExpression = formulaEdit_->text().toStdString();

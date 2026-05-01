@@ -7,12 +7,15 @@
 #include <QPoint>
 #include <QPointF>
 #include <QRectF>
+#include <QSize>
 #include <QString>
 #include <QWidget>
 
 #include <map>
 #include <string>
 #include <vector>
+
+class QPainter;
 
 namespace plotapp::ui {
 
@@ -24,6 +27,7 @@ public:
     void setProject(plotapp::Project* project);
     bool exportPng(const QString& path) const;
     bool exportPng(const QString& path, const QSize& size, int dpi = 0) const;
+    bool exportSvgSnapshot(const QString& path, const QSize& size, int dpi = 0) const;
     QImage renderToImage(const QSize& size, int dpi = 0) const;
     void resetViewToProject();
 
@@ -61,6 +65,9 @@ private:
         double maxY {1.0};
     };
 
+    QSize effectiveSize() const;
+    int canvasWidth() const;
+    int canvasHeight() const;
     QRectF plotRect() const;
     QRectF titleRect() const;
     QRectF yLabelRect() const;
@@ -78,8 +85,10 @@ private:
     std::vector<std::size_t> fullSelectionForLayer(const plotapp::Layer& layer) const;
     void emitPointSelectionChanged();
     void applySelectionRect(const QRectF& pixelRect);
+    void paintCanvas(QPainter& painter);
 
     plotapp::Project* project_ {nullptr};
+    mutable QSize renderSizeOverride_;
     mutable std::map<std::string, QRectF> legendRects_;
     double viewXMin_ {-10.0};
     double viewXMax_ {10.0};
